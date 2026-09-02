@@ -863,7 +863,9 @@ function cfgMissing(){
 
 /* ══════════════════ helpers ══════════════════ */
 const $ = id=>document.getElementById(id);
-const today = ()=> new Date().toISOString().slice(0,10);
+/* LOCAL calendar date. toISOString() is UTC: in Atlanta every record after 20:00 EDT
+   would have been stamped TOMORROW. Night trauma is exactly the data that matters. */
+const today = ()=>{ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.remove("hide");
   clearTimeout(t._x); t._x=setTimeout(()=>t.classList.add("hide"),1900); }
@@ -993,6 +995,7 @@ function quickLog(){
   const r = baseRecord("case");
   r.date = today();   /* quick log = happening NOW; never inherit a backfill date */
   r.stub = true;
+  retireZeroDay(r.date);
   ENTRIES.push(r); persist();
   toast("Logged — finish it later");
 }
@@ -1027,6 +1030,7 @@ function fullSave(){
   r.taught = !!FLAGS.teach;
   r.soloInRoom = !!FLAGS.solo;
   r.acuity = acuity(r);
+  retireZeroDay(r.date);
   if(prior){ ENTRIES = ENTRIES.map(e=> e.id===prior.id ? r : e); }
   else { ENTRIES.push(r); }
   const wasEdit = !!prior;
@@ -1099,9 +1103,17 @@ function finishStub(id){
   setTimeout(()=>$("full").scrollIntoView({behavior:"smooth",block:"start"}),120);
 }
 function zeroDay(){
-  const r = baseRecord("zero"); r.stub=false;
+  const d = $("f-date").value || today();
+  if(ENTRIES.some(e=>e.kind==="zero" && e.date===d)){ toast("Zero-day already recorded for "+d); return; }
+  if(ENTRIES.some(e=>e.kind==="case" && e.date===d)){ toast("You have a case logged on "+d+" — not a zero-day"); return; }
+  const r = baseRecord("zero"); r.stub=false; r.date=d;
   ENTRIES.push(r); persist();
   toast("Zero-day recorded — absence is data");
+}
+/* A case on a date that carried a zero-day: the case wins, the zero-day was wrong. */
+function retireZeroDay(d){
+  const before=ENTRIES.length; ENTRIES=ENTRIES.filter(e=>!(e.kind==="zero" && e.date===d));
+  if(ENTRIES.length<before) toast("Removed the zero-day for "+d+" — a case was logged");
 }
 let MISS = {};
 function missedOpp(){
@@ -1158,6 +1170,13 @@ function drawICTL(){
 function ictlName(i){ return ICTL[i].name; }
 function logICTL(){
   if(ICTL_SEL===null){ toast("Pick a task first"); return; }
+  const d = $("f-date").value || today();
+  const prior = ENTRIES.filter(e=>e.kind==="ictl" && e.taskIndex===ICTL_SEL && e.date===d);
+  if(prior.length){
+    const born = prior.filter(e=>e.fromCaseId).length;
+    if(!confirm("Already credited "+prior.reduce((n,e)=>n+(e.count||1),0)+"× on "+d
+        +(born?" ("+born+" from a saved case)":"")+".\n\nAdd another? Only if this was a SEPARATE performance.")) return;
+  }
   const r = baseRecord("ictl"); r.stub=false;
   r.task = ictlName(ICTL_SEL);
   r.taskIndex = ICTL_SEL;
@@ -1269,11 +1288,22 @@ function drawHealth(){
 }
 
 /* ══════════════════ export / import ══════════════════ */
-function download(name, text, mime){
+/* Returns a promise → true if the file left the app. On iOS/Android the native share
+   sheet is the reliable path (Files, iCloud Drive, Mail, AirDrop); the <a download>
+   trick is unreliable inside a Home-Screen web app. Desktop keeps the plain download. */
+async function download(name, text, mime){
   const b = new Blob([text],{type:mime||"application/json"});
+  const mobile = /iPad|iPhone|iPod|Android/.test(navigator.userAgent||"");
+  if(mobile && navigator.canShare){
+    try{
+      const f = new File([b], name, {type:b.type});
+      if(navigator.canShare({files:[f]})){ await navigator.share({files:[f], title:name}); return true; }
+    }catch(e){ if(e && e.name==="AbortError") return false; /* user cancelled — NOT exported */ }
+  }
   const u = URL.createObjectURL(b), a=document.createElement("a");
   a.href=u; a.download=name; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(u); a.remove(); },400);
+  return true;
 }
 function exportReminder(){
   /* Weekly recurring event, next Sunday 19:00 local. Plain iCalendar; the phone's own calendar app owns it. */
@@ -1295,9 +1325,11 @@ function exportJSON(){
   const payload = { schemaVersion:SCHEMA, exportedAt:new Date().toISOString(),
     site:siteLabel(), logger:c.logger||"", count:ENTRIES.length, config:c, entries:ENTRIES };
   const stamp = today()+"_"+(siteLabel()||"NOSITE")+"_"+ENTRIES.length+"rec_v"+SCHEMA;
-  download("caselog_"+stamp+".json", JSON.stringify(payload,null,1));
-  lsSet(K_EXP, Date.now()); refreshAll();
-  toast("Exported "+ENTRIES.length+" records");
+  download("caselog_"+stamp+".json", JSON.stringify(payload,null,1)).then(ok=>{
+    if(!ok){ toast("Export cancelled — nothing saved"); return; }
+    lsSet(K_EXP, Date.now()); refreshAll();
+    toast("Exported "+ENTRIES.length+" records — now put it somewhere that is not this phone");
+  });
 }
 function exportCSV(){
   const cols = ["id","schemaVersion","kind","stub","date","savedAt","activityType","siteId","siteName",
@@ -1309,8 +1341,10 @@ function exportCSV(){
     const v = e[c];
     return esc(v && typeof v==="object" ? JSON.stringify(v) : v);
   }).join(",")));
-  download("caselog_"+today()+"_"+ENTRIES.length+"rec.csv", lines.join("\n"), "text/csv");
-  lsSet(K_EXP, Date.now()); refreshAll();
+  download("caselog_"+today()+"_"+ENTRIES.length+"rec.csv", lines.join("\n"), "text/csv").then(ok=>{
+    if(!ok){ toast("Export cancelled"); return; }
+    lsSet(K_EXP, Date.now()); refreshAll();
+  });
 }
 $("file").onchange = function(){
   const f = this.files[0]; if(!f) return;
@@ -1325,9 +1359,23 @@ $("file").onchange = function(){
               " and this app is v"+SCHEMA+".\nUpdate the app first — importing it here would silently mangle fields.");
         return;
       }
+      const KINDS = {case:1, zero:1, missed:1, ictl:1};
+      const valid = r => r && typeof r==="object" && typeof r.id==="string" && KINDS[r.kind]
+        && /^\d{4}-\d{2}-\d{2}$/.test(r.date||"") && !(r.schemaVersion > SCHEMA);
+      const bad = rows.filter(r=>!valid(r));
+      if(bad.length && !confirm(bad.length+" of "+rows.length+" rows are not valid case-log records and will be SKIPPED.\n\nContinue?")) return;
+      const mine = (cfg().logger||"").trim().toUpperCase();
+      const good = rows.filter(valid);
+      const foreign = mine ? good.filter(r=>(r.loggerId||"").trim().toUpperCase()!==mine) : [];
+      if(foreign.length){
+        const who = Array.from(new Set(foreign.map(r=>r.loggerId||"(blank)"))).join(", ");
+        if(!confirm("⚠ "+foreign.length+" records belong to a DIFFERENT logger ("+who+"), not "+mine+".\n\n"
+          +"This phone should hold only YOUR records. Merging others here inflates your tally and can resurrect records they deleted.\n\n"
+          +"Pooling exports is done on the computer with merge_v3.py, not here.\n\nImport them anyway?")) return;
+      }
       const have = new Set(ENTRIES.map(e=>e.id));
       let added=0;
-      rows.forEach(r=>{ if(r && r.id && !have.has(r.id)){ ENTRIES.push(r); added++; } });
+      good.forEach(r=>{ if(!have.has(r.id)){ ENTRIES.push(r); added++; } });
       if(p.config && !cfg().site) setCfg(p.config);
       persist(); alert("Restored. "+added+" new records added ("+rows.length+" in file).");
     }catch(e){ alert("Could not read that file."); }
@@ -1421,9 +1469,11 @@ function refreshAll(){ drawAlerts(); drawTodo(); drawEditBar(); }
 
 
 /* ══════════════════ records browser: edit + delete ══════════════════ */
+let REC_SHOW = 20;
 function drawRecList(){
   const el=$("reclist"); if(!el) return;
-  const rows=[...ENTRIES].sort((a,b)=>(b.savedAt||"").localeCompare(a.savedAt||"")).slice(0,20);
+  const all=[...ENTRIES].sort((a,b)=>(b.savedAt||"").localeCompare(a.savedAt||""));
+  const rows=all.slice(0, REC_SHOW);
   if(!rows.length){ el.innerHTML='<p class="hint" style="text-align:center;padding:14px 0">Nothing logged yet.</p>'; return; }
   const label=e=>{
     if(e.kind==="zero")   return "🌑 Zero-day";
@@ -1435,13 +1485,17 @@ function drawRecList(){
     <div class="g"><b>${label(e)}</b><small>${e.date||""}${e.editedAt?" · edited":""}${e.wasStub&&!e.stub?" · was stub":""}</small></div>
     ${e.kind==="case"?`<button class="chip sm" data-editrec="${e.id}">${e.stub?"Finish":"Edit"}</button>`:""}
     <button class="chip sm" data-delrec="${e.id}">✕</button>
-  </div>`).join("");
+  </div>`).join("") + (all.length>REC_SHOW ? `<button class="chip sm wide" id="rec-more" style="margin-top:8px">Show ${Math.min(50, all.length-REC_SHOW)} more (${all.length-REC_SHOW} older)</button>` : "");
+  const more=$("rec-more"); if(more) more.onclick=()=>{ REC_SHOW+=50; drawRecList(); };
   el.querySelectorAll("[data-editrec]").forEach(b=>b.onclick=()=>editRecord(b.dataset.editrec));
   el.querySelectorAll("[data-delrec]").forEach(b=>b.onclick=()=>{
     const e=ENTRIES.find(x=>x.id===b.dataset.delrec);
-    if(!confirm("Delete this record permanently?\n\n"+label(e)+" · "+(e.date||"")+"\n\nThere is no undo.")) return;
-    ENTRIES=ENTRIES.filter(x=>x.id!==b.dataset.delrec); persist(); drawRecList(); drawHealth();
-    toast("Deleted");
+    const kids = ENTRIES.filter(x=>x.kind==="ictl" && x.fromCaseId===e.id);
+    if(!confirm("Delete this record permanently?\n\n"+label(e)+" · "+(e.date||"")
+        +(kids.length? "\n\nAlso removes "+kids.length+" ICTL credit"+(kids.length>1?"s":"")+" that came from this case.":"")
+        +"\n\nThere is no undo.")) return;
+    ENTRIES=ENTRIES.filter(x=>x.id!==e.id && !(x.kind==="ictl" && x.fromCaseId===e.id)); persist(); drawRecList(); drawHealth();
+    toast(kids.length? "Deleted + "+kids.length+" ICTL credit"+(kids.length>1?"s":"") : "Deleted");
   });
 }
 function editRecord(id){
@@ -1560,7 +1614,18 @@ $("btn-help").onclick=tourStart;
   } else { $("persisted").textContent="unsupported"; }
   /* --- PWA: offline shell + installability --- */
   if("serviceWorker" in navigator){
-    navigator.serviceWorker.register("sw.js").catch(()=>{});
+    navigator.serviceWorker.register("sw.js").then(reg=>{
+      reg.addEventListener("updatefound", ()=>{
+        const w = reg.installing; if(!w) return;
+        w.addEventListener("statechange", ()=>{
+          if(w.state==="activated" && navigator.serviceWorker.controller){
+            const bar=$("installbar"); if(bar) bar.innerHTML=`<div class="banner ok">⬆ <b>New version ready.</b>
+              <button id="do-reload" class="chip sm" style="margin-left:8px">Reload</button></div>`;
+            const r=$("do-reload"); if(r) r.onclick=()=>location.reload();
+          }
+        });
+      });
+    }).catch(()=>{});
   }
   let deferredPrompt=null;
   window.addEventListener("beforeinstallprompt", ev=>{
@@ -1580,7 +1645,10 @@ $("btn-help").onclick=tourStart;
     } else if(isIOS){
       bar.innerHTML=`<div class="banner ok">⤓ <b>Add to Home Screen</b> — tap Share, then
         “Add to Home Screen”. <b>This is required on iPhone</b>: Safari can clear a normal
-        browser tab’s data after about a week of not opening it.</div>`;
+        browser tab’s data after about a week of not opening it.</div>`
+        + (ENTRIES.length ? `<div class="banner bad">⚠ <b>${ENTRIES.length} record${ENTRIES.length>1?"s":""} live in this Safari tab.</b>
+        The installed app gets its <b>own separate storage</b> and will open empty. Export here first,
+        then Restore inside the installed app. Log nothing more in this tab.</div>` : "");
     } else { bar.innerHTML=""; }
   };
   drawInstall();
