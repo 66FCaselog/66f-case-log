@@ -5,7 +5,7 @@
    entries live in localStorage + IndexedDB on the device and are never
    transmitted anywhere. There is no network endpoint in this application. */
 
-const CACHE = "66f-caselog-v3.5.3"; /* v3.5.3: missed-opportunity capture rebuilt as facts-only form (eligible · asked · who-by-role · stated reason); ICTL sim toggle labeled */
+const CACHE = "66f-caselog-v3.5.4"; /* v3.5.4: icon badge = records at risk when export 7+ days overdue; weekly .ics export reminder */
 const SHELL = [
   "./",
   "./index.html",

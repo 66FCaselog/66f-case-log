@@ -383,6 +383,9 @@ details.sub[open]>summary{margin-bottom:10px}
   <button class="bigbtn ghost sm" id="btn-import" style="margin-top:8px">⬆ Restore from backup</button>
   <input type="file" id="file" accept=".json,application/json" class="hide">
   <p class="hint">⭐ <b>Do one test restore this week.</b> A backup you have never restored from is not a backup.</p>
+  <button class="bigbtn ghost sm" id="btn-remind" style="margin-top:8px">📅 Add a weekly export reminder to my calendar</button>
+  <p class="hint">Creates a repeating calendar event on this phone (no account, no server). The app icon also shows a
+    badge with the number of records at risk once an export is 7+ days overdue — clear it by exporting.</p>
   <details class="sub" open style="margin-top:16px"><summary>Counts</summary>
   <div id="counts"></div></details>
 </section>
@@ -1204,6 +1207,15 @@ function drawTodo(){
 
 /* ══════════════════ health / alerts ══════════════════ */
 function lastExport(){ return lsGet(K_EXP,null); }
+/* Export overdue = there is something worth losing AND no export for 7+ days.
+   Shared by the banner and the home-screen badge so they can never disagree. */
+function exportOverdue(){
+  const d = daysSince(lastExport());
+  const oldest = ENTRIES.reduce((m,e)=> e.date && (!m||e.date<m) ? e.date : m, null);
+  const dataAgeDays = oldest ? Math.floor((Date.now()-new Date(oldest+"T00:00:00").getTime())/86400000) : 0;
+  const worthProtecting = ENTRIES.length >= 5 || dataAgeDays >= 3;
+  return worthProtecting && (d===null || d>=7);
+}
 function drawAlerts(){
   const box = $("alerts"); let h="";
   const miss = cfgMissing();
@@ -1213,10 +1225,7 @@ function drawAlerts(){
      anything worth losing becomes wallpaper, and then the real alarms get ignored too.
      Threshold: 5+ records, or any data older than 3 days. */
   const d = daysSince(lastExport());
-  const oldest = ENTRIES.reduce((m,e)=> e.date && (!m||e.date<m) ? e.date : m, null);
-  const dataAgeDays = oldest ? Math.floor((Date.now()-new Date(oldest+"T00:00:00").getTime())/86400000) : 0;
-  const worthProtecting = ENTRIES.length >= 5 || dataAgeDays >= 3;
-  if(worthProtecting && (d===null || d>=7))
+  if(exportOverdue())
     h += `<div class="banner ${d===null||d>14?"bad":"warn"}">⬇ <b>${d===null?"Never exported":"Last export "+d+" days ago"}.</b>
       ${ENTRIES.length} records live only in this browser. Phone browsers can clear local
       storage without warning. → Data.</div>`;
@@ -1265,6 +1274,21 @@ function download(name, text, mime){
   const u = URL.createObjectURL(b), a=document.createElement("a");
   a.href=u; a.download=name; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(u); a.remove(); },400);
+}
+function exportReminder(){
+  /* Weekly recurring event, next Sunday 19:00 local. Plain iCalendar; the phone's own calendar app owns it. */
+  const now = new Date(), next = new Date(now);
+  next.setDate(now.getDate() + ((7 - now.getDay()) % 7 || 7)); next.setHours(19,0,0,0);
+  const f = d => d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0")
+              +"T"+String(d.getHours()).padStart(2,"0")+String(d.getMinutes()).padStart(2,"0")+"00";
+  const ics = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//66F Case Log//EN","BEGIN:VEVENT",
+    "UID:66f-caselog-weekly-export@"+location.host,"DTSTAMP:"+f(now)+"Z","DTSTART:"+f(next),
+    "RRULE:FREQ=WEEKLY","SUMMARY:Export 66F Case Log backup",
+    "DESCRIPTION:Open the 66F Case Log → Data → EXPORT BACKUP (JSON). Keep two copies. "+location.href,
+    "BEGIN:VALARM","TRIGGER:-PT0M","ACTION:DISPLAY","DESCRIPTION:Export 66F Case Log","END:VALARM",
+    "END:VEVENT","END:VCALENDAR"].join("\r\n");
+  download("66F_CaseLog_weekly_export.ics", ics, "text/calendar");
+  toast("Open the downloaded .ics to add it to your calendar");
 }
 function exportJSON(){
   const c = cfg();
@@ -1370,6 +1394,7 @@ $("btn-quick").onclick  = quickLog;
 $("btn-save").onclick   = fullSave;
 $("btn-zero").onclick   = zeroDay;
 $("btn-missed").onclick = missedOpp;
+$("btn-remind").onclick = exportReminder;
 $("btn-ictl").onclick   = logICTL;
 $("btn-export").onclick = exportJSON;
 $("btn-csv").onclick    = exportCSV;
@@ -1381,7 +1406,9 @@ document.querySelectorAll("[data-flag]").forEach(b=>b.onclick=()=>{
 });
 
 function syncBadge(){
-  const n = ENTRIES.filter(e=>e.stub).length;
+  /* Badge = records at risk when export is overdue (the alarm nobody has to open the app to see);
+     otherwise the unfinished-stub count. The badge persists on the home-screen icon after the app closes. */
+  const n = exportOverdue() ? ENTRIES.length : ENTRIES.filter(e=>e.stub).length;
   try{
     if(navigator.setAppBadge){ n>0 ? navigator.setAppBadge(n) : (navigator.clearAppBadge&&navigator.clearAppBadge()); }
   }catch(e){}
@@ -1470,7 +1497,7 @@ const TOUR=[
  {v:"ictl", t:"#ictlchips",  h:"ICTL — logs on its own, no case needed",
   b:"A central line on the ward counts. The ten official 66F tasks are tracked with <b>two denominators</b>: seven capturable here, three TO&E tasks that need field equipment no civilian OR has — a zero on those is a <b>structural fact, never a miss</b>."},
  {v:"data", t:"#btn-export", h:"Export weekly — this is the whole safety net",
-  b:"Your data lives only in this browser. Phones can clear it <b>without warning</b>. Export every week, keep two copies, and <b>do one test restore in your first week</b> — a backup you've never restored from is not a backup. The app tracks days-since-export and alarms if records ever vanish."},
+  b:"Your data lives only in this browser. Phones can clear it <b>without warning</b>. Export every week, keep two copies, and <b>do one test restore in your first week</b> — a backup you've never restored from is not a backup. The app tracks days-since-export, puts a <b>badge on the icon</b> once an export is 7+ days overdue, and alarms if records ever vanish. Tap the calendar button once for a weekly reminder."},
  {v:"log",  t:null,          h:"That's the instrument",
   b:"Install to your home screen if you haven't (Share → Add to Home Screen — <b>required on iPhone</b>). Replay this tour any time with the <b>?</b> button. Now log the first case — it takes five seconds."}
 ];
