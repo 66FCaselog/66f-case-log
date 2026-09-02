@@ -298,6 +298,48 @@ details.sub[open]>summary{margin-bottom:10px}
 
   <button class="bigbtn ghost sm" id="btn-zero" style="margin-top:6px">🌑 No qualifying cases today</button>
   <button class="bigbtn ghost sm" id="btn-missed" style="margin-top:8px">⚠ Log a missed opportunity</button>
+  <div class="card gold hide" id="missed-form" style="margin-top:8px">
+    <p class="hint" style="margin-top:0"><b>Facts, not motives.</b> A missed opportunity is an indicated task you were
+      <b>available and credentialed</b> to do that someone else did. No names — roles only.</p>
+    <label>1 · Were you available and credentialed to do it at that moment?</label>
+    <div class="chips" id="m-elig">
+      <button class="chip sm" data-v="YES">Yes — available &amp; credentialed</button>
+      <button class="chip sm" data-v="CRED">No — privileges not in place here</button>
+      <button class="chip sm" data-v="NA">No — I wasn't available</button>
+    </div>
+    <div id="m-rest">
+    <label>2 · Did you ask for it?</label>
+    <div class="chips" id="m-asked">
+      <button class="chip sm" data-v="ASKED">Asked — declined</button>
+      <button class="chip sm" data-v="NOT_OFFERED">Not offered — learned after</button>
+      <button class="chip sm" data-v="DIDNT_ASK">Didn't ask</button>
+    </div>
+    <label>3 · Who did it instead? (role only)</label>
+    <div class="chips" id="m-who">
+      <button class="chip sm" data-v="TRAINEE">Resident / SRNA / trainee</button>
+      <button class="chip sm" data-v="MIL_MD">Military anesthesiologist</button>
+      <button class="chip sm" data-v="CIV_MD">Civilian anesthesiologist</button>
+      <button class="chip sm" data-v="MIL_CRNA">Military CRNA</button>
+      <button class="chip sm" data-v="CIV_CRNA">Civilian CRNA</button>
+      <button class="chip sm" data-v="SURGEON">Surgeon / proceduralist</button>
+      <button class="chip sm" data-v="OTHER">Other / unknown</button>
+    </div>
+    <label>4 · What reason was stated? (what they said, not what you think)</label>
+    <div class="chips" id="m-reason">
+      <button class="chip sm" data-v="ACT">Assignment / ACT model</button>
+      <button class="chip sm" data-v="RESI">Trainee education priority</button>
+      <button class="chip sm" data-v="TURN">Turnover / time pressure</button>
+      <button class="chip sm" data-v="PREF">Surgeon or patient request</button>
+      <button class="chip sm" data-v="NONE">No reason given</button>
+    </div>
+    </div>
+    <label>Task (no identifiers)</label>
+    <input type="text" id="m-task" placeholder="e.g. supraclavicular block · art line · RSI trauma bay" autocomplete="off">
+    <div class="row" style="margin-top:12px">
+      <button class="bigbtn sm" id="btn-missed-save">LOG IT</button>
+      <button class="bigbtn ghost sm" id="btn-missed-cancel">Cancel</button>
+    </div>
+  </div>
 </section>
 
 <!-- ═══════════════ UNFINISHED ═══════════════ -->
@@ -318,8 +360,8 @@ details.sub[open]>summary{margin-bottom:10px}
     <div id="ictlchips" class="chips"></div>
     <div class="row" style="margin-top:12px">
       <div><label>Count</label><input type="number" id="i-count" value="1" min="1"></div>
-      <div><label>Simulated?</label>
-        <div class="chips"><button class="chip sm" id="i-sim">N</button></div></div>
+      <div><label>Live or sim? (tap to switch)</label>
+        <div class="chips"><button class="chip sm" id="i-sim">Simulated: NO</button></div></div>
     </div>
     <button class="bigbtn sm" id="btn-ictl" style="margin-top:12px">LOG TASK</button>
   </div>
@@ -751,8 +793,11 @@ function siteTypeOf(id){ return SITE_TYPE[id] || ""; }
 const PS_OPTS = [["1","I"],["2","II"],["3","III (+1)"],["4","IV (+2)"],["5","V (+3)"],["6","VI"]];
 const QC_OPTS = [["99140","Emergency +2"],["99100","Age <1 or >70 +1"],
   ["99116","Hypothermia +5"],["99135","Controlled hypotension +5"]];
-const MISS_REASONS = [["ACT","ACT model / attending did it"],["RESI","Resident or SRNA did it"],
-  ["TIME","No time / competing demand"],["CRED","Not credentialed here"],["PREF","Surgeon or patient preference"]];
+const MISS_REASONS = {ACT:"Assignment / ACT model",RESI:"Trainee education priority",TURN:"Turnover / time pressure",
+  PREF:"Surgeon or patient request",NONE:"No reason given",CRED:"Privileges not in place (structural)",
+  TIME:"No time (legacy)",UNSPEC:"Unspecified"};
+const MISS_WHO = {TRAINEE:"trainee",MIL_MD:"mil anesthesiologist",CIV_MD:"civ anesthesiologist",MIL_CRNA:"mil CRNA",
+  CIV_CRNA:"civ CRNA",SURGEON:"surgeon",OTHER:"other"};
 
 /* ══════════════════ storage: belt, braces and a canary ══════════════════ */
 let DB = null;
@@ -1055,17 +1100,45 @@ function zeroDay(){
   ENTRIES.push(r); persist();
   toast("Zero-day recorded — absence is data");
 }
+let MISS = {};
 function missedOpp(){
-  const what = prompt("What indicated task did someone else do?\n(No identifiers.)");
-  if(!what) return;
-  const why = prompt("Why?\n"+MISS_REASONS.map((m,i)=>(i+1)+". "+m[1]).join("\n")+"\n\nEnter 1-5:");
-  const idx = parseInt(why,10);
-  const r = baseRecord("missed"); r.stub=false;
-  r.missedTask = what.trim();
-  r.missedReason = (idx>=1&&idx<=5)? MISS_REASONS[idx-1][0] : "UNSPEC";
-  ENTRIES.push(r); persist();
-  toast("Missed opportunity logged");
+  MISS = {}; $("m-task").value = "";
+  document.querySelectorAll("#missed-form .chip").forEach(b=>b.classList.remove("on"));
+  $("m-rest").classList.remove("hide");
+  $("missed-form").classList.remove("hide");
+  setTimeout(()=>$("missed-form").scrollIntoView({behavior:"smooth",block:"start"}),80);
 }
+function missPick(group, key){
+  return function(ev){
+    const b = ev.target.closest(".chip"); if(!b) return;
+    MISS[key] = b.dataset.v;
+    group.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on", x===b));
+    if(key==="elig"){
+      if(b.dataset.v==="NA"){ toast("Not available = not a missed opportunity. Nothing to log."); }
+      $("m-rest").classList.toggle("hide", b.dataset.v!=="YES");   /* CRED = structural barrier; who/asked/reason don't apply */
+    }
+  };
+}
+$("m-elig").onclick   = missPick($("m-elig"),"elig");
+$("m-asked").onclick  = missPick($("m-asked"),"asked");
+$("m-who").onclick    = missPick($("m-who"),"who");
+$("m-reason").onclick = missPick($("m-reason"),"reason");
+$("btn-missed-cancel").onclick = ()=>$("missed-form").classList.add("hide");
+$("btn-missed-save").onclick = function(){
+  const what = $("m-task").value.trim();
+  if(!MISS.elig){ toast("Answer question 1 first"); return; }
+  if(MISS.elig==="NA"){ toast("Not available = not a missed opportunity. Nothing logged."); $("missed-form").classList.add("hide"); return; }
+  if(!what){ toast("Name the task (no identifiers)"); return; }
+  if(MISS.elig==="YES" && !(MISS.asked && MISS.who && MISS.reason)){ toast("Answer 2, 3 and 4 — facts only"); return; }
+  const r = baseRecord("missed"); r.stub=false;
+  r.missedTask = what;
+  r.missedEligible = MISS.elig;                      /* YES | CRED */
+  if(MISS.elig==="CRED"){ r.missedReason="CRED"; r.missedAsked=""; r.missedWho=""; }
+  else { r.missedReason=MISS.reason; r.missedAsked=MISS.asked; r.missedWho=MISS.who; }
+  ENTRIES.push(r); persist();
+  $("missed-form").classList.add("hide");
+  toast(MISS.elig==="CRED" ? "Structural barrier logged (privileges)" : "Missed opportunity logged");
+};
 
 /* ══════════════════ ICTL ══════════════════ */
 let ICTL_SEL=null, ICTL_SIM=false;
@@ -1075,7 +1148,7 @@ function drawICTL(){
       style="justify-content:flex-start;text-align:left">${t.name}${t.capturable?"":' <span class="pill sim" style="margin-left:8px">TO&amp;E</span>'}</button>`
   ).join("");
   $("ictlchips").querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>{ ICTL_SEL=+b.dataset.i; drawICTL(); });
-  $("i-sim").textContent = ICTL_SIM?"Y":"N";
+  $("i-sim").textContent = ICTL_SIM?"Simulated: YES ✓":"Simulated: NO";
   $("i-sim").classList.toggle("on",ICTL_SIM);
   drawTally();
 }
@@ -1206,7 +1279,7 @@ function exportCSV(){
   const cols = ["id","schemaVersion","kind","stub","date","savedAt","activityType","siteId","siteName",
     "loggerId","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description",
     "asaPS","qc","acuity","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
-    "missedTask","missedReason","autonomy"];
+    "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy"];
   const esc = v => v==null? "" : /[",\n]/.test(String(v))? '"'+String(v).replace(/"/g,'""')+'"' : String(v);
   const lines = [cols.join(",")].concat(ENTRIES.map(e=>cols.map(c=>{
     const v = e[c];
@@ -1327,7 +1400,7 @@ function drawRecList(){
   if(!rows.length){ el.innerHTML='<p class="hint" style="text-align:center;padding:14px 0">Nothing logged yet.</p>'; return; }
   const label=e=>{
     if(e.kind==="zero")   return "🌑 Zero-day";
-    if(e.kind==="missed") return "⚠ Missed: "+(e.missedTask||"")+" ("+(e.missedReason||"")+")";
+    if(e.kind==="missed") return "⚠ Missed: "+(e.missedTask||"")+" · "+(MISS_REASONS[e.missedReason]||e.missedReason||"")+(e.missedWho?" · did it: "+(MISS_WHO[e.missedWho]||e.missedWho):"")+(e.missedAsked==="ASKED"?" · asked, declined":"");
     if(e.kind==="ictl")   return "✓ ICTL: "+(e.task||"")+(e.simulated?" (SIM)":"");
     return (e.stub?"◷ Stub · ":"")+(e.activityType||"?")+(e.cpt?" · "+e.cpt:"")+(e.description?" · "+e.description:"")+(e.simulated?" (SIM)":"");
   };
@@ -1393,7 +1466,7 @@ const TOUR=[
  {v:"log",  t:"#btn-zero",   h:"Zero-days — absence is data",
   b:"A day with no qualifying cases is a <b>record</b>; a day you didn't open the app is a <b>hole</b>. One tap keeps the denominator honest."},
  {v:"log",  t:"#btn-missed", h:"Missed opportunities — the counterfactual",
-  b:"An indicated task came up and <b>someone else did it</b>. Task + reason code, fifteen seconds, logged unemotionally. This is the most original measurement in the instrument: it counts the readiness that was <b>present but not accessible</b>."},
+  b:"An indicated task came up, <b>you were available and credentialed</b>, and someone else did it. Four facts, no motives: were you eligible · did you ask · <b>who did it, by role</b> (a trainee has a training need; a civilian has no readiness requirement) · what reason was <b>stated</b>. Not available? Then it isn't a miss — the form says so. This counts readiness that was <b>present but not accessible</b>, and it only holds up if it stays unemotional."},
  {v:"ictl", t:"#ictlchips",  h:"ICTL — logs on its own, no case needed",
   b:"A central line on the ward counts. The ten official 66F tasks are tracked with <b>two denominators</b>: seven capturable here, three TO&E tasks that need field equipment no civilian OR has — a zero on those is a <b>structural fact, never a miss</b>."},
  {v:"data", t:"#btn-export", h:"Export weekly — this is the whole safety net",
