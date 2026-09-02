@@ -1,0 +1,23 @@
+{
+  "name": "66F Case Log",
+  "short_name": "66F Log",
+  "description": "Clinical activity, ICTL and autonomy capture for the Army Nurse Anesthetist.",
+  "id": "/66f-case-log/",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0B0C",
+  "theme_color": "#0B0B0C",
+  "categories": ["medical", "productivity"],
+  "icons": [
+    { "src": "icons/coin192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/coin512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Quick log a case", "short_name": "Quick log", "url": "./index.html#quick" },
+    { "name": "Unfinished", "short_name": "Unfinished", "url": "./index.html#todo" },
+    { "name": "Log an ICTL task", "short_name": "ICTL", "url": "./index.html#ictl" }
+  ]
+}

@@ -1,0 +1,3 @@
+# Working backups — never ship these to the public host.
+*.bak_*
+*.bak
