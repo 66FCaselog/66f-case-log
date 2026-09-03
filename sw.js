@@ -5,7 +5,7 @@
    entries live in localStorage + IndexedDB on the device and are never
    transmitted anywhere. There is no network endpoint in this application. */
 
-const CACHE = "66f-caselog-v3.5.5"; /* v3.5.5: local-date stamping (UTC bug), import validation + cross-logger guard, ICTL double-count guard, cascade delete, zero-day idempotence, full records browser, share-sheet export, iOS pre-install storage warning, update banner */
+const CACHE = "66f-caselog-v3.5.5-icon"; /* v3.5.5: local-date stamping (UTC bug), import validation + cross-logger guard, ICTL double-count guard, cascade delete, zero-day idempotence, full records browser, share-sheet export, iOS pre-install storage warning, update banner */
 const SHELL = [
   "./",
   "./index.html",
