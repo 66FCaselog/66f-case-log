@@ -296,7 +296,20 @@ details.sub[open]>summary{margin-bottom:10px}
     <button class="bigbtn" id="btn-save" style="margin-top:16px">SAVE CASE</button>
   </details>
 
-  <button class="bigbtn ghost sm" id="btn-zero" style="margin-top:6px">🌑 No qualifying cases today</button>
+  <button class="bigbtn ghost sm" id="btn-zero" style="margin-top:6px">🌑 No qualifying cases today — what was the day?</button>
+  <div class="card hide" id="zero-form" style="margin-top:8px">
+    <p class="hint" style="margin-top:0"><b>A day with no cases is data only if the reason is captured.</b> The first two are
+    clinical days (you were at the bedside, the cases were not there). The rest are Army time away from the bedside —
+    the denominator the force cannot see today.</p>
+    <div class="chips" id="zero-types">
+      <button class="chip sm" data-daytype="CLIN">Clinical — no qualifying cases</button>
+      <button class="chip sm" data-daytype="FLOAT">Float / relief / giving breaks</button>
+      <button class="chip sm" data-daytype="ADMIN">Admin / additional duty</button>
+      <button class="chip sm" data-daytype="TRAIN">Training · FTX · TDY · school</button>
+      <button class="chip sm" data-daytype="LEAVE">Leave / pass</button>
+    </div>
+    <button class="bigbtn ghost sm" id="btn-zero-cancel" style="margin-top:8px">Cancel</button>
+  </div>
   <button class="bigbtn ghost sm" id="btn-missed" style="margin-top:8px">⚠ Log a missed opportunity</button>
   <div class="card gold hide" id="missed-form" style="margin-top:8px">
     <p class="hint" style="margin-top:0"><b>Facts, not motives.</b> A missed opportunity is an indicated task you were
@@ -408,6 +421,17 @@ details.sub[open]>summary{margin-bottom:10px}
         </select></div>
     </div>
     <p class="hint">⛔ None of these can be back-filled. A case saved without them is permanently unattributable.</p>
+  </div>
+  <div class="card">
+    <div class="row">
+      <div><label>Rank</label><select id="s-rank"></select></div>
+      <div><label>Duty position</label><select id="s-billet"></select></div>
+    </div>
+    <div style="margin-top:10px"><label>Additional duties (optional, short)</label>
+      <input id="s-duties" maxlength="80" placeholder="e.g. MEDLOG OIC · sim center · deployment prep"></div>
+    <p class="hint">Rank and duty position are stamped on every record from now on. They let the force compare
+    bedside time by billet — a Chief CRNA's admin days versus a staff CRNA's — without naming anyone.
+    Update them when they change; old records keep what was true then.</p>
   </div>
   <div class="card">
     <label>Base-unit source</label>
@@ -782,7 +806,10 @@ const SITE_GROUPS = [
    ["ODE","Off-duty employment or locums"],
    ["CIVILIAN","Civilian hospital — other arrangement"]]],
  ["Deployed / operational","DEPLOYED",[
-   ["ROLE2","Role 2"],["ROLE3","Role 3"],
+   ["FRSD","FRSD — Forward Resuscitative and Surgical Detachment (Role 2)"],
+   ["ARST","ARST — austere resuscitative surgical team (Role 2)"],
+   ["FH","Field Hospital / CSH (Role 3)"],
+   ["ROLE2","Other Role 2"],["ROLE3","Other Role 3"],
    ["DEPLOYED_OTHER","Other operational setting — type below"]]],
  ["Other","OTHER",[["OTHER","Other — type below"]]]
 ];
@@ -799,6 +826,16 @@ const QC_OPTS = [["99140","Emergency +2"],["99100","Age <1 or >70 +1"],
 const MISS_REASONS = {ACT:"Assignment / ACT model",RESI:"Trainee education priority",TURN:"Turnover / time pressure",
   PREF:"Surgeon or patient request",NONE:"No reason given",CRED:"Privileges not in place (structural)",
   TIME:"No time (legacy)",UNSPEC:"Unspecified"};
+/* v3.6.0: a no-case day carries WHAT the day was. Missing dayType (pre-3.6 records) = CLIN.
+   CLIN + FLOAT are clinical days (at the bedside, no cases). ADMIN/TRAIN are duty days away
+   from the bedside. LEAVE is excluded from every denominator. */
+const DAY_TYPES = {CLIN:"Clinical — no qualifying cases", FLOAT:"Float / relief / giving breaks",
+  ADMIN:"Admin / additional duty", TRAIN:"Training · FTX · TDY · school", LEAVE:"Leave / pass"};
+const CLINICAL_DAY = {CLIN:1, FLOAT:1};
+const RANKS   = ["2LT","1LT","CPT","MAJ","LTC","COL"];
+const BILLETS = [["STAFF","Staff CRNA"],["CHIEF","Chief CRNA"],["SECTION","Section / department chief"],
+  ["FACULTY","Faculty · program director"],["OIC","OIC · commander · staff (non-clinical billet)"],
+  ["STUDENT","Student (Phase 2)"],["OTHER","Other"]];
 const MISS_WHO = {TRAINEE:"trainee",MIL_MD:"mil anesthesiologist",CIV_MD:"civ anesthesiologist",MIL_CRNA:"mil CRNA",
   CIV_CRNA:"civ CRNA",SURGEON:"surgeon",OTHER:"other"};
 
@@ -986,7 +1023,7 @@ function baseRecord(kind){
     date: $("f-date").value || today(),
     activityType: ACT,
     siteId: c.site||"", siteName: siteLabel(), siteType: siteTypeOf(c.site||""),
-    loggerId: c.logger||"",
+    loggerId: c.logger||"", loggerRank: c.rank||"", loggerBillet: c.billet||"",
     sitePolicyCeiling: c.ceiling? +c.ceiling : null,
     baseUnitSource: BU_SOURCE, baseUnitYear: BU_YEAR
   };
@@ -1102,17 +1139,24 @@ function finishStub(id){
   $("full").open = true;
   setTimeout(()=>$("full").scrollIntoView({behavior:"smooth",block:"start"}),120);
 }
-function zeroDay(){
+function zeroDay(){ $("zero-form").classList.toggle("hide"); }
+function saveDay(type){
   const d = $("f-date").value || today();
-  if(ENTRIES.some(e=>e.kind==="zero" && e.date===d)){ toast("Zero-day already recorded for "+d); return; }
-  if(ENTRIES.some(e=>e.kind==="case" && e.date===d)){ toast("You have a case logged on "+d+" — not a zero-day"); return; }
-  const r = baseRecord("zero"); r.stub=false; r.date=d;
+  if(ENTRIES.some(e=>e.kind==="zero" && e.date===d)){ toast("A day record already exists for "+d); return; }
+  /* a clinical no-case day cannot coexist with a case; an admin/training/leave record can
+     (a half day of clinic and a half day of admin is a real day) */
+  if(CLINICAL_DAY[type] && ENTRIES.some(e=>e.kind==="case" && e.date===d)){
+    toast("You have a case logged on "+d+" — that is a clinical day with cases, not a zero-day"); return; }
+  const r = baseRecord("zero"); r.stub=false; r.date=d; r.dayType=type;
   ENTRIES.push(r); persist();
-  toast("Zero-day recorded — absence is data");
+  $("zero-form").classList.add("hide");
+  toast((DAY_TYPES[type]||"Day")+" recorded — absence is data");
 }
-/* A case on a date that carried a zero-day: the case wins, the zero-day was wrong. */
+/* A case on a date that carried a CLINICAL zero-day: the case wins, the zero-day was wrong.
+   Admin / training / leave records survive — the case happened alongside them. */
 function retireZeroDay(d){
-  const before=ENTRIES.length; ENTRIES=ENTRIES.filter(e=>!(e.kind==="zero" && e.date===d));
+  const before=ENTRIES.length;
+  ENTRIES=ENTRIES.filter(e=>!(e.kind==="zero" && e.date===d && CLINICAL_DAY[e.dayType||"CLIN"]));
   if(ENTRIES.length<before) toast("Removed the zero-day for "+d+" — a case was logged");
 }
 let MISS = {};
@@ -1280,7 +1324,8 @@ function drawHealth(){
     "Cases (live)": cases.filter(e=>!e.simulated).length,
     "Cases (simulated)": cases.filter(e=>e.simulated).length,
     "Unfinished stubs": ENTRIES.filter(e=>e.stub).length,
-    "Zero-days": ENTRIES.filter(e=>e.kind==="zero").length,
+    "Day records (no cases)": ENTRIES.filter(e=>e.kind==="zero").length,
+    "  of which away from bedside": ENTRIES.filter(e=>e.kind==="zero" && !CLINICAL_DAY[e.dayType||"CLIN"]).length,
     "ICTL entries": ENTRIES.filter(e=>e.kind==="ictl").length,
     "Missed opportunities": ENTRIES.filter(e=>e.kind==="missed").length
   };
@@ -1335,7 +1380,7 @@ function exportCSV(){
   const cols = ["id","schemaVersion","kind","stub","date","savedAt","activityType","siteId","siteName",
     "loggerId","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description",
     "asaPS","qc","acuity","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
-    "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy"];
+    "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet"];
   const esc = v => v==null? "" : /[",\n]/.test(String(v))? '"'+String(v).replace(/"/g,'""')+'"' : String(v);
   const lines = [cols.join(",")].concat(ENTRIES.map(e=>cols.map(c=>{
     const v = e[c];
@@ -1395,6 +1440,11 @@ function drawSetup(){
   $("s-siteother").value = c.siteOther||"";
   $("s-logger").value = c.logger||"";
   $("s-ceiling").value = c.ceiling||"";
+  $("s-rank").innerHTML = '<option value="">— not set —</option>' + RANKS.map(r=>`<option value="${r}">${r}</option>`).join("") + '<option value="OTHER">Other</option>';
+  $("s-rank").value = c.rank||"";
+  $("s-billet").innerHTML = '<option value="">— not set —</option>' + BILLETS.map(b=>`<option value="${b[0]}">${b[1]}</option>`).join("");
+  $("s-billet").value = c.billet||"";
+  $("s-duties").value = c.duties||"";
   $("s-busrc-display").textContent = BU_SOURCE + " \u00b7 " + BU_YEAR;
   $("schemav").textContent = "v"+SCHEMA;
   $("origin").textContent = location.origin==="null"? "file:// (no home-screen install)" : location.origin;
@@ -1407,6 +1457,7 @@ function saveSetup(){
   if(formBlank && cfgHasData) return;
   setCfg({ site:$("s-site").value, siteOther:$("s-siteother").value.trim(),
     logger:$("s-logger").value.trim().toUpperCase(), ceiling:$("s-ceiling").value,
+    rank:$("s-rank").value, billet:$("s-billet").value, duties:$("s-duties").value.trim(),
     busrc:BU_SOURCE, buyr:BU_YEAR });
   $("hsub").textContent = (siteLabel()||"NO SITE") + (siteTypeOf(cfg().site) ? " · "+siteTypeOf(cfg().site) : "");
   refreshAll(); toast("Saved ✓");
@@ -1414,7 +1465,7 @@ function saveSetup(){
 /* Save on BOTH input and change. `change` alone only fires on blur for text
    inputs, so typing initials or an edition year and then backgrounding the app
    silently lost the value — on precisely the fields that cannot be back-filled. */
-const SETUP_IDS = ["s-site","s-siteother","s-logger","s-ceiling"];
+const SETUP_IDS = ["s-site","s-siteother","s-logger","s-ceiling","s-rank","s-billet","s-duties"];
 ["input","change"].forEach(evt=>{
   document.addEventListener(evt, e=>{ if(e.target && SETUP_IDS.indexOf(e.target.id)>-1) saveSetup(); });
 });
@@ -1441,6 +1492,8 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>show(b.dataset.
 $("btn-quick").onclick  = quickLog;
 $("btn-save").onclick   = fullSave;
 $("btn-zero").onclick   = zeroDay;
+$("btn-zero-cancel").onclick = ()=>$("zero-form").classList.add("hide");
+document.querySelectorAll("#zero-types [data-daytype]").forEach(b=>b.onclick=()=>saveDay(b.dataset.daytype));
 $("btn-missed").onclick = missedOpp;
 $("btn-remind").onclick = exportReminder;
 $("btn-ictl").onclick   = logICTL;
@@ -1476,7 +1529,7 @@ function drawRecList(){
   const rows=all.slice(0, REC_SHOW);
   if(!rows.length){ el.innerHTML='<p class="hint" style="text-align:center;padding:14px 0">Nothing logged yet.</p>'; return; }
   const label=e=>{
-    if(e.kind==="zero")   return "🌑 Zero-day";
+    if(e.kind==="zero")   return "🌑 Day: "+(DAY_TYPES[e.dayType||"CLIN"]||e.dayType);
     if(e.kind==="missed") return "⚠ Missed: "+(e.missedTask||"")+" · "+(MISS_REASONS[e.missedReason]||e.missedReason||"")+(e.missedWho?" · did it: "+(MISS_WHO[e.missedWho]||e.missedWho):"")+(e.missedAsked==="ASKED"?" · asked, declined":"");
     if(e.kind==="ictl")   return "✓ ICTL: "+(e.task||"")+(e.simulated?" (SIM)":"");
     return (e.stub?"◷ Stub · ":"")+(e.activityType||"?")+(e.cpt?" · "+e.cpt:"")+(e.description?" · "+e.description:"")+(e.simulated?" (SIM)":"");
@@ -1544,7 +1597,7 @@ const TOUR=[
   b:"CPT by plain-English search, then acuity = <b>base units + ASA physical status + qualifying circumstances</b>. That's the anesthesia measure of case weight — not a borrowed surgical RVU. An ASA I knee scope and an ASA IV ruptured aneurysm stop looking identical."},
  {v:"log",  t:"#autrows",    h:"Autonomy — the variable nobody else captures",
   b:"Scored 0–3 <b>per phase of care</b>: 0 attending directs · 1 present, you execute · 2 available, you decide · 3 alone. <b>When in doubt, score down.</b> \"No crisis occurred\" is <b>NA, never 0</b>. This is the whole question for a 66F — the deployed role requires 3."},
- {v:"log",  t:"#btn-zero",   h:"Zero-days — absence is data",
+ {v:"log",  t:"#btn-zero",   h:"No-case days — absence is data, and WHY is the data",
   b:"A day with no qualifying cases is a <b>record</b>; a day you didn't open the app is a <b>hole</b>. One tap keeps the denominator honest."},
  {v:"log",  t:"#btn-missed", h:"Missed opportunities — the counterfactual",
   b:"An indicated task came up, <b>you were available and credentialed</b>, and someone else did it. Four facts, no motives: were you eligible · did you ask · <b>who did it, by role</b> (a trainee has a training need; a civilian has no readiness requirement) · what reason was <b>stated</b>. Not available? Then it isn't a miss — the form says so. This counts readiness that was <b>present but not accessible</b>, and it only holds up if it stays unemotional."},
