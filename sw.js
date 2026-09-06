@@ -5,7 +5,12 @@
    entries live in localStorage + IndexedDB on the device and are never
    transmitted anywhere. There is no network endpoint in this application. */
 
-const CACHE = "66f-caselog-v3.6.1-audit"; /* v3.6.1: audit fixes — edits no longer restamp
+const CACHE = "66f-caselog-v3.6.2-audit2"; /* v3.6.2: second-pass fixes — persisted deletion tombstones
+   (a deleted record cannot come back via a second window, a reboot, a stale mirror or an old backup);
+   newest revision wins on every merge path; finishing a stub hydrates its own attributes; unsaved
+   draft protected; blank "complete" refused; strict numeric form fields; import normalises every
+   consumed field and recomputes acuity; two more HTML sinks made inert; ICTL count bounded.
+   v3.6.1: audit fixes — edits no longer restamp
    today's site/rank/billet/ceiling onto old records; cross-instance save union (two open windows
    could erase each other); canary is now a high-water mark; imported text is HTML-escaped; import
    validates kind/date/version and rejects duplicate ids; acuity coerces numbers and whitelists

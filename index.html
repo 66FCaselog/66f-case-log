@@ -864,49 +864,74 @@ let ENTRIES = [];
 /* ids this session deleted ON PURPOSE, so the cross-instance union below can never
    resurrect them out of another window's stale copy */
 const DELETED = new Set();
+/* Tombstones: the ids deleted on this phone, PERSISTED (localStorage + mirror), so a
+   second window, a reboot, a stale mirror or a re-imported old backup cannot quietly
+   bring a deleted record back. Bounded; ids are ~15 chars. */
+const K_DEL = "crna_caselog_v3_deleted";
+function loadDeleted(){ try{ (lsGet(K_DEL,[])||[]).forEach(id=>DELETED.add(id)); }catch(e){} }
+function saveDeleted(){ const a=Array.from(DELETED).slice(-2000); lsSet(K_DEL,a); idbPut("deleted",a); }
 /* true only while a deliberate removal is in flight; lets the canary drop once */
-let DROP_OK = false;
+let DROP_OK = false, DROPPED = 0;
 /* keep the records matching pred, remember the rest as deliberately gone */
 function forget(pred){
   const before = ENTRIES.length;
   ENTRIES.forEach(e=>{ if(e && e.id && !pred(e)) DELETED.add(e.id); });
   ENTRIES = ENTRIES.filter(pred);
-  if(ENTRIES.length < before) DROP_OK = true;
-  return before - ENTRIES.length;
+  const gone = before - ENTRIES.length;
+  if(gone){ DROP_OK = true; DROPPED += gone; saveDeleted(); }
+  return gone;
 }
-function load(){ ENTRIES = lsGet(K_MAIN,[]) || []; }
+/* newest revision of a record: an edit stamps editedAt, a stub completion completedAt */
+const stampOf = e => (e && (e.editedAt || e.completedAt || e.savedAt)) || "";
+/* Merge another copy of the log into ENTRIES. Adds records we lack, takes the OTHER
+   copy's version of a record when its revision is newer (unless we are editing that
+   very record right now), and never revives a tombstoned id. Returns what changed. */
+function mergeIn(other){
+  const res = {added:0, updated:0};
+  if(!Array.isArray(other)) return res;
+  const idx = new Map(); ENTRIES.forEach((e,i)=>{ if(e&&e.id) idx.set(e.id,i); });
+  other.forEach(o=>{
+    if(!o || !o.id || DELETED.has(o.id)) return;
+    const i = idx.get(o.id);
+    if(i===undefined){ ENTRIES.push(o); idx.set(o.id, ENTRIES.length-1); res.added++; }
+    else if(o.id!==EDIT_ID && stampOf(o) > stampOf(ENTRIES[i])){ ENTRIES[i]=o; res.updated++; }
+  });
+  return res;
+}
+function load(){ ENTRIES = lsGet(K_MAIN,[]) || []; loadDeleted(); }
 function persist(){
   /* Another instance of this app — a second tab, or an old version left open on the
      same phone — may have written since we loaded. Writing our whole array blind
      would erase what they added, silently, often at the SAME record count, which is
-     exactly the loss the canary cannot see. Union by id before writing. */
+     exactly the loss the canary cannot see. Merge before writing. */
   try{
-    const onDisk = lsGet(K_MAIN,null);
-    if(Array.isArray(onDisk)){
-      const mine = new Set(ENTRIES.map(e=>e&&e.id));
-      const theirs = onDisk.filter(e=> e && e.id && !mine.has(e.id) && !DELETED.has(e.id));
-      if(theirs.length) ENTRIES = ENTRIES.concat(theirs);
-    }
+    loadDeleted();                                   /* another window may have deleted */
+    ENTRIES = ENTRIES.filter(e=> !(e && e.id && DELETED.has(e.id) && e.id!==EDIT_ID));
+    mergeIn(lsGet(K_MAIN,null));
   }catch(e){}
   const ok = lsSet(K_MAIN, ENTRIES);
   idbPut("entries", ENTRIES);                 // mirror: different eviction rules
-  setCanary(ENTRIES.length);                  // tripwire
-  DROP_OK = false;
+  if(ok) setCanary(ENTRIES.length);           // tripwire — never advanced by a FAILED write
+  DROP_OK = false; DROPPED = 0;
   if(!ok) alert("SAVE FAILED — storage is full or blocked. Export immediately.");
   refreshAll();
 }
 /* canary lives in a cookie: different eviction behaviour from localStorage.
    It is a HIGH-WATER MARK. An ordinary save may never lower it — otherwise the
-   next thing you log silently clears the evidence of a real loss. Only a
-   deliberate delete, or a successful JSON export, re-baselines it. */
+   next thing you log silently clears the evidence of a real loss. A deliberate
+   delete lowers it by EXACTLY the number deleted (so a pre-existing gap stays
+   visible); a successful JSON export re-baselines it. */
 function setCanary(n){
   try{
     const cur = getCanary();
-    if(cur && n < cur.n && !DROP_OK) return;
+    if(cur && n < cur.n){
+      if(!DROP_OK) return;
+      n = Math.max(n, cur.n - DROPPED);
+    }
     document.cookie = CANARY+"="+n+"|"+Date.now()+";path=/;max-age=63072000;samesite=lax";
   }catch(e){}
 }
-function rebaseCanary(){ DROP_OK = true; setCanary(ENTRIES.length); DROP_OK = false; }
+function rebaseCanary(){ DROP_OK = true; DROPPED = 1e9; setCanary(ENTRIES.length); DROP_OK = false; DROPPED = 0; }
 function getCanary(){
   try{
     const m = document.cookie.match(new RegExp(CANARY+"=([^;]*)"));
@@ -972,7 +997,7 @@ function drawActs(){
   const hit = ACTS.find(a=>a[0]===ACT);
   $("acthint").textContent = hit?hit[2]:"";
   const qb = $("btn-quick");
-  if(qb) qb.innerHTML = "\u26A1 QUICK LOG \u2014 " + (hit?hit[1]:ACT);
+  if(qb) qb.textContent = "\u26A1 QUICK LOG \u2014 " + (hit?hit[1]:ACT);   /* text: ACT can come from an import */
   const blk = $("acuity-block");
   if(blk) blk.style.display = (ACT==="OR") ? "" : "none";
   const cb = $("cpt-block");
@@ -1077,8 +1102,20 @@ function quickLog(){
   ENTRIES.push(r); persist();
   toast("Logged — finish it later");
 }
+function formDirty(){
+  return !!($("f-cpt").value.trim() || $("f-base").value.trim() || $("f-desc").value.trim()
+    || $("f-cpt2").value.trim() || $("f-mins").value.trim() || PS || Object.keys(AUT).length || PROCSEL.size);
+}
 function fullSave(){
   const prior = EDIT_ID ? ENTRIES.find(e=>e.id===EDIT_ID) : null;
+  /* A "complete" case with nothing in it is worse than a stub: it leaves the queue,
+     counts as complete in every analysis, and carries no detail. Refuse. */
+  if(!formDirty()){ toast(prior && prior.stub ? "Nothing entered — still a stub. Add some detail first."
+                                              : "Nothing entered. Use QUICK LOG for a bare case."); return; }
+  /* numeric boxes: "7junk" used to parse as 7 */
+  const bv=$("f-base").value.trim(), mv=$("f-mins").value.trim();
+  if(bv && !/^\d+(\.\d+)?$/.test(bv)){ toast("Base units must be a number"); $("f-base").focus(); return; }
+  if(mv && !/^\d+$/.test(mv)){ toast("Minutes must be a whole number"); $("f-mins").focus(); return; }
   const r = baseRecord("case");
   r.stub = false;
   if(prior){
@@ -1093,14 +1130,14 @@ function fullSave(){
        variables the site/billet/policy analyses are stratified on. A deliberate site
        override further down still wins. */
     ["siteId","siteName","siteType","siteOverride","loggerId","loggerRank","loggerBillet",
-     "sitePolicyCeiling"].forEach(k=>{ if(prior[k]!==undefined) r[k]=prior[k]; });
+     "sitePolicyCeiling","baseUnitSource","baseUnitYear"].forEach(k=>{ if(prior[k]!==undefined) r[k]=prior[k]; });
     if(prior.stub){ r.completedAt = new Date().toISOString(); r.wasStub = true; }
     else { r.completedAt = prior.completedAt || null;
            r.wasStub = !!prior.wasStub;
            r.editedAt = new Date().toISOString(); }
   }
   r.cpt = $("f-cpt").value.trim();
-  r.baseUnits = parseFloat($("f-base").value)||null;
+  r.baseUnits = bv ? Number(bv) : null;
   r.description = $("f-desc").value.trim();
   r.asaPS = PS? +PS : null;
   r.qc = Object.keys(QC).filter(k=>QC[k]);
@@ -1108,9 +1145,11 @@ function fullSave(){
   r.procs = PROCSEL.size ? Array.from(PROCSEL) : null;
   r.cptSecondary = (function(){ const v=$("f-cpt2").value.split(",").map(x=>x.trim()).filter(Boolean);
     return v.length? v : null; })();
-  r.minutes = parseInt($("f-mins").value,10)||null;
+  r.minutes = mv ? parseInt(mv,10) : null;
   (function(){ const os=$("f-site")? $("f-site").value : "";
-    if(os && os!==cfg().site){ r.siteId=os; r.siteName=os; r.siteType=siteTypeOf(os); r.siteOverride=true; }
+    /* compare against the RECORD's site (historical, restored above), not today's
+       Setup — choosing today's configured site for an old record is a real choice */
+    if(os && os!==r.siteId){ r.siteId=os; r.siteName=os; r.siteType=siteTypeOf(os); r.siteOverride=(os!==cfg().site); }
     else if(!os && prior && prior.siteOverride){
       /* override cleared on purpose — fall back to the configured site. Without this
          the historical restore above would pin the old override forever. */
@@ -1160,13 +1199,16 @@ function acuity(r){
   if(r.activityType!=="OR") return null;
   /* base must be a real finite number. An IMPORTED record can carry "7" (string),
      "7junk", -3 or Infinity; "7"+1 would silently become the string "71". */
-  const base = Number(r.baseUnits);
-  if(!isFinite(base) || base <= 0) return null;
+  const raw = r.baseUnits;
+  const base = typeof raw==="number" ? raw
+             : (typeof raw==="string" && /^\d+(\.\d+)?$/.test(raw.trim())) ? Number(raw) : NaN;
+  if(!isFinite(base) || base <= 0 || base > 60) return null;     /* 60 > any CMS base */
   let a = base;
   if(r.asaPS===3) a+=1; else if(r.asaPS===4) a+=2; else if(r.asaPS===5) a+=3;
   /* dedupe, and count ONLY the four codes that carry units — an unrecognised
      code used to score +5 by falling through the ternary */
-  Array.from(new Set(r.qc||[])).forEach(q=>{ a += (QC_UNITS[String(q)] || 0); });
+  Array.from(new Set(Array.isArray(r.qc)? r.qc : [])).forEach(q=>{
+    a += Object.prototype.hasOwnProperty.call(QC_UNITS, String(q)) ? QC_UNITS[String(q)] : 0; });
   return a;
 }
 function clearForm(resetDate){
@@ -1195,21 +1237,11 @@ function drawEditBar(){
     <button id="cancel-edit" class="chip sm" style="margin-left:8px">Cancel</button></div>`;
   $("cancel-edit").onclick=()=>{ EDIT_ID=null; clearForm(true); toast("Left it unfinished"); };
 }
-function finishStub(id){
-  const e = ENTRIES.find(x=>x.id===id); if(!e) return;
-  /* Clear FIRST. This screen used to inherit whatever was half-typed in the form —
-     another case's CPT, base units, description, ASA, autonomy and flags were
-     copied onto an unrelated stub. */
-  clearForm(true);
-  EDIT_ID = id;
-  ACT = e.activityType || "OR";
-  $("f-date").value = e.date || today();
-  syncDateNote();
-  drawActs(); drawAut(); drawPSQC(); drawEditBar();
-  show("log");
-  $("full").open = true;
-  setTimeout(()=>$("full").scrollIntoView({behavior:"smooth",block:"start"}),120);
-}
+/* Finishing a stub is editing it: one initializer, so the form is cleared of any
+   OTHER case's draft and then hydrated with everything the stub itself carries —
+   its simulated flag, site override, and any detail an import gave it. (v3.6.1's
+   clear-only version silently turned a simulated stub into live exposure.) */
+function finishStub(id){ editRecord(id); }
 function zeroDay(){ $("zero-form").classList.toggle("hide"); }
 function saveDay(type){
   const d = $("f-date").value || today();
@@ -1295,7 +1327,7 @@ function logICTL(){
   const r = baseRecord("ictl"); r.stub=false;
   r.task = ictlName(ICTL_SEL);
   r.taskIndex = ICTL_SEL;
-  r.count = parseInt($("i-count").value,10)||1;
+  r.count = Math.min(50, Math.max(1, parseInt($("i-count").value,10)||1));   /* -4 used to save as -4 */
   r.simulated = ICTL_SIM;
   ENTRIES.push(r); persist();
   ICTL_SEL=null; ICTL_SIM=false; $("i-count").value=1; drawICTL();
@@ -1313,8 +1345,9 @@ function drawTally(){
       ⛔ Never report these as one figure. The TO&amp;E tasks require field equipment that does not exist
       in a civilian OR — a zero there is a <b>structural finding, not a miss</b>.</div></div>` +
     ICTL.map((t,i)=>{
-      const n = live.filter(e=>e.taskIndex===i).reduce((s,e)=>s+(e.count||1),0);
-      const s = sim.filter(e=>e.taskIndex===i).reduce((s2,e)=>s2+(e.count||1),0);
+      const cnt = e => { const c=Number(e.count); return (Number.isInteger(c) && c>0 && c<=50) ? c : 1; };
+      const n = live.filter(e=>e.taskIndex===i).reduce((s,e)=>s+cnt(e),0);
+      const s = sim.filter(e=>e.taskIndex===i).reduce((s2,e)=>s2+cnt(e),0);
       return `<div class="kv"><span>${t.name}${t.capturable?"":' <span class="pill sim">not capturable here</span>'}</span>
         <b>${n}${s?` <span style="color:var(--warn);font-size:12px">+${s} sim</span>`:""}</b></div>`;
     }).join("");
@@ -1495,8 +1528,39 @@ $("file").onchange = function(){
          prototype when the record is opened for editing */
       const stripProto = o => { if(o && typeof o==="object"
         && Object.prototype.hasOwnProperty.call(o,"__proto__")) delete o["__proto__"]; return o; };
+      const ACT_IDS = new Set(ACTS.map(a=>a[0]));
       const valid = r => r && typeof r==="object" && typeof r.id==="string" && r.id.trim()!==""
-        && isKind(r.kind) && realDate(r.date) && okVer(r.schemaVersion);
+        && isKind(r.kind) && realDate(r.date) && okVer(r.schemaVersion)
+        && (r.kind!=="ictl" || (Number.isInteger(r.taskIndex) && r.taskIndex>=0 && r.taskIndex<ICTL.length));
+      /* Shape every field the app later READS. "Restored" used to mean "parsed":
+         an object where an array was expected crashed the edit screen, a number
+         where a timestamp was expected crashed the Data list, a stored acuity of
+         999 was trusted over the inputs it disagreed with. */
+      const str  = v => (typeof v==="string") ? v : (v==null ? "" : (typeof v==="number"||typeof v==="boolean") ? String(v) : "");
+      const strs = v => Array.isArray(v) ? v.filter(x=>typeof x==="string") : [];
+      const num  = (v,lo,hi,int) => { const x = typeof v==="number" ? v : (typeof v==="string" && v.trim()!=="" ? Number(v) : NaN);
+        return (isFinite(x) && x>=lo && x<=hi && (!int || Number.isInteger(x))) ? x : null; };
+      const ts   = v => (typeof v==="string" && v) ? v : null;
+      const norm = r => {
+        stripProto(r); stripProto(r.autonomy);
+        r.savedAt = ts(r.savedAt) || (r.date+"T00:00:00.000Z");
+        r.completedAt = ts(r.completedAt); r.editedAt = ts(r.editedAt);
+        ["description","cpt","task","missedTask","missedReason","missedWho","loggerId","siteId","siteName",
+         "siteType","loggerRank","loggerBillet","dayType"].forEach(k=>{ if(k in r) r[k]=str(r[k]); });
+        r.stub=!!r.stub; r.simulated=!!r.simulated; r.taught=!!r.taught; r.soloInRoom=!!r.soloInRoom;
+        r.siteOverride=!!r.siteOverride;
+        if(r.kind==="case"){
+          if(!ACT_IDS.has(r.activityType)){ r.activityType="OTHER"; r._activityCoerced=true; }
+          r.qc = strs(r.qc); r.procs = strs(r.procs).length ? strs(r.procs) : null;
+          r.cptSecondary = strs(r.cptSecondary).length ? strs(r.cptSecondary) : null;
+          r.baseUnits = num(r.baseUnits,0.5,60); r.minutes = num(r.minutes,0,1440,true);
+          r.asaPS = num(r.asaPS,1,6,true); r.sitePolicyCeiling = num(r.sitePolicyCeiling,0,3,true);
+          r.autonomy = (r.autonomy && typeof r.autonomy==="object" && !Array.isArray(r.autonomy)) ? r.autonomy : {};
+          r.acuity = acuity(r);          /* derived: recomputed, never trusted from the file */
+        }
+        if(r.kind==="ictl"){ r.count = num(r.count,1,50,true) || 1; }
+        return r;
+      };
       const bad = rows.filter(r=>!valid(r));
       if(bad.length && !confirm(bad.length+" of "+rows.length+" rows are not valid case-log records and will be SKIPPED.\n\nContinue?")) return;
       const mine = (cfg().logger||"").trim().toUpperCase();
@@ -1509,21 +1573,35 @@ $("file").onchange = function(){
           +"Pooling exports is done on the computer with merge_v3.py, not here.\n\nImport them anyway?")) return;
       }
       const have = new Set(ENTRIES.map(e=>e.id));
-      let added=0, dupes=0;
+      let added=0, dupes=0, updated=0, tomb=0;
+      const tombed = good.filter(r=>DELETED.has(r.id));
+      let revive = false;
+      if(tombed.length){
+        revive = confirm(tombed.length+" record"+(tombed.length>1?"s":"")+" in this file "+(tombed.length>1?"were":"was")
+          +" DELETED on this phone earlier.\n\nBring "+(tombed.length>1?"them":"it")+" back?\n\n(Cancel = keep them deleted)");
+        if(revive) tombed.forEach(r=>DELETED.delete(r.id));
+        if(revive) saveDeleted();
+      }
       good.forEach(r=>{
         /* `have` MUST grow as we go: without this, two rows carrying the same id
            both entered the log from a single file */
-        if(have.has(r.id)){ dupes++; return; }
-        stripProto(r); stripProto(r.autonomy);
+        if(DELETED.has(r.id)){ tomb++; return; }
+        norm(r);
+        if(have.has(r.id)){
+          /* same id already here: take the file's copy only if it is a NEWER revision */
+          const i = ENTRIES.findIndex(e=>e.id===r.id);
+          if(i>=0 && stampOf(r) > stampOf(ENTRIES[i])){ ENTRIES[i]=r; updated++; } else dupes++;
+          return;
+        }
         ENTRIES.push(r); have.add(r.id); added++;
       });
       if(p.config && !cfg().site) setCfg(p.config);
       persist();
       alert("Restored. "+added+" new records added ("+rows.length+" in file)."
-        +(dupes? "\n"+dupes+" row"+(dupes>1?"s":"")+" skipped as duplicate ids." : "")
-        +(bad.length? "\n"+bad.length+" row"+(bad.length>1?"s":"")+" skipped as invalid." : "")
-        +"\n\nNOTE: importing only ADDS records it has never seen. It does not update a"
-        +" record you have since corrected here, and it can bring back one you deleted.");
+        +(updated? "\n"+updated+" existing record"+(updated>1?"s":"")+" replaced by a newer revision from the file." : "")
+        +(dupes? "\n"+dupes+" row"+(dupes>1?"s":"")+" already here (same or older) — unchanged." : "")
+        +(tomb? "\n"+tomb+" row"+(tomb>1?"s":"")+" left deleted." : "")
+        +(bad.length? "\n"+bad.length+" row"+(bad.length>1?"s":"")+" skipped as invalid." : ""));
     }catch(e){ alert("Could not read that file."); }
   };
   rd.readAsText(f); this.value="";
@@ -1654,6 +1732,9 @@ function drawRecList(){
 }
 function editRecord(id){
   const e=ENTRIES.find(x=>x.id===id); if(!e || e.kind!=="case") return;
+  /* never destroy an unsaved draft without asking */
+  if(EDIT_ID!==id && formDirty()
+     && !confirm("There is an unsaved case in the form.\n\nDiscard it and open this one?")) return;
   clearForm(true);
   EDIT_ID=id;
   ACT=e.activityType||"OR";
@@ -1760,15 +1841,15 @@ $("btn-help").onclick=tourStart;
      good one on every boot. Union by id: never lose either side. */
   {
     const mirror = await idbGet("entries");
+    try{ const md = await idbGet("deleted"); if(Array.isArray(md)) md.forEach(id=>DELETED.add(id)); }catch(e){}
     if(Array.isArray(mirror) && mirror.length){
-      const known = new Set(ENTRIES.map(e=>e&&e.id));
-      const extra = mirror.filter(e=> e && e.id && !known.has(e.id));
-      if(extra.length){
-        const wasEmpty = !ENTRIES.length;
-        ENTRIES = ENTRIES.concat(extra); lsSet(K_MAIN, ENTRIES);
-        setTimeout(()=>alert("Recovered "+extra.length+" record"+(extra.length>1?"s":"")+
+      const wasEmpty = !ENTRIES.length;
+      const res = mergeIn(mirror);
+      if(res.added || res.updated){
+        lsSet(K_MAIN, ENTRIES); saveDeleted();
+        setTimeout(()=>alert("Recovered "+(res.added+res.updated)+" record"+((res.added+res.updated)>1?"s":"")+
           " from the backup store"+(wasEmpty? " — local storage had been cleared."
-          : " that were missing from this phone's main storage.")+"\n\nEXPORT NOW."),400);
+          : " that were missing or older in this phone's main storage.")+"\n\nEXPORT NOW."),400);
       }
     }
   }
@@ -1779,10 +1860,13 @@ $("btn-help").onclick=tourStart;
     try{
       const other = JSON.parse(ev.newValue||"[]");
       if(!Array.isArray(other)) return;
-      const mine = new Set(ENTRIES.map(e=>e&&e.id));
-      const extra = other.filter(e=> e && e.id && !mine.has(e.id) && !DELETED.has(e.id));
-      if(extra.length){ ENTRIES = ENTRIES.concat(extra); refreshAll();
-        toast(extra.length+" record"+(extra.length>1?"s":"")+" from another window"); }
+      loadDeleted();                                   /* the other window may have deleted */
+      const before = ENTRIES.length;
+      ENTRIES = ENTRIES.filter(e=> !(e && e.id && DELETED.has(e.id) && e.id!==EDIT_ID));
+      const res = mergeIn(other);
+      const removed = before - ENTRIES.length + (res.added);
+      if(res.added || res.updated || removed){ refreshAll(); if(typeof drawRecList==="function") drawRecList();
+        toast("Log updated from another window"); }
     }catch(e){}
   });
   if(navigator.storage && navigator.storage.persist){
