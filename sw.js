@@ -5,7 +5,14 @@
    entries live in localStorage + IndexedDB on the device and are never
    transmitted anywhere. There is no network endpoint in this application. */
 
-const CACHE = "66f-caselog-v3.6.0-days"; /* v3.6.0: no-case day TYPES (clinical/float/admin/training/leave), rank + duty position stamped on records, deployed site split FRSD/ARST/FH.
+const CACHE = "66f-caselog-v3.6.1-audit"; /* v3.6.1: audit fixes — edits no longer restamp
+   today's site/rank/billet/ceiling onto old records; cross-instance save union (two open windows
+   could erase each other); canary is now a high-water mark; imported text is HTML-escaped; import
+   validates kind/date/version and rejects duplicate ids; acuity coerces numbers and whitelists
+   qualifying circumstances; a CSV no longer clears the backup alarm; the form is cleared before
+   finishing a stub; the date box no longer sticks after an edit; SW install fails loudly and
+   deletes only its own caches.
+   v3.6.0: no-case day TYPES (clinical/float/admin/training/leave), rank + duty position stamped on records, deployed site split FRSD/ARST/FH.
    v3.5.5: local-date stamping (UTC bug), import validation + cross-logger guard, ICTL double-count guard, cascade delete, zero-day idempotence, full records browser, share-sheet export, iOS pre-install storage warning, update banner */
 const SHELL = [
   "./",
@@ -18,13 +25,20 @@ const SHELL = [
 
 self.addEventListener("install", e => {
   self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
+  /* ⛔ NO .catch() here, deliberately. Swallowing an addAll failure turned a
+     half-downloaded shell into a "successful" install — and activate below then
+     deleted the cache that still worked, leaving the app with no offline copy at
+     all. Letting install REJECT keeps the previous worker and its good cache. */
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
 });
 
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys()
-      .then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      /* delete only OUR old caches. github.io serves every repo of an account from
+         one origin, so an unfiltered sweep would evict other apps' caches too. */
+      .then(ks => Promise.all(ks.filter(k => k.startsWith("66f-caselog-") && k !== CACHE)
+                                .map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

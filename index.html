@@ -861,18 +861,52 @@ function lsGet(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:JSON
 function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); return true; }catch(e){ return false; } }
 
 let ENTRIES = [];
+/* ids this session deleted ON PURPOSE, so the cross-instance union below can never
+   resurrect them out of another window's stale copy */
+const DELETED = new Set();
+/* true only while a deliberate removal is in flight; lets the canary drop once */
+let DROP_OK = false;
+/* keep the records matching pred, remember the rest as deliberately gone */
+function forget(pred){
+  const before = ENTRIES.length;
+  ENTRIES.forEach(e=>{ if(e && e.id && !pred(e)) DELETED.add(e.id); });
+  ENTRIES = ENTRIES.filter(pred);
+  if(ENTRIES.length < before) DROP_OK = true;
+  return before - ENTRIES.length;
+}
 function load(){ ENTRIES = lsGet(K_MAIN,[]) || []; }
 function persist(){
+  /* Another instance of this app — a second tab, or an old version left open on the
+     same phone — may have written since we loaded. Writing our whole array blind
+     would erase what they added, silently, often at the SAME record count, which is
+     exactly the loss the canary cannot see. Union by id before writing. */
+  try{
+    const onDisk = lsGet(K_MAIN,null);
+    if(Array.isArray(onDisk)){
+      const mine = new Set(ENTRIES.map(e=>e&&e.id));
+      const theirs = onDisk.filter(e=> e && e.id && !mine.has(e.id) && !DELETED.has(e.id));
+      if(theirs.length) ENTRIES = ENTRIES.concat(theirs);
+    }
+  }catch(e){}
   const ok = lsSet(K_MAIN, ENTRIES);
   idbPut("entries", ENTRIES);                 // mirror: different eviction rules
   setCanary(ENTRIES.length);                  // tripwire
+  DROP_OK = false;
   if(!ok) alert("SAVE FAILED — storage is full or blocked. Export immediately.");
   refreshAll();
 }
-/* canary lives in a cookie: different eviction behaviour from localStorage */
+/* canary lives in a cookie: different eviction behaviour from localStorage.
+   It is a HIGH-WATER MARK. An ordinary save may never lower it — otherwise the
+   next thing you log silently clears the evidence of a real loss. Only a
+   deliberate delete, or a successful JSON export, re-baselines it. */
 function setCanary(n){
-  try{ document.cookie = CANARY+"="+n+"|"+Date.now()+";path=/;max-age=63072000;samesite=lax"; }catch(e){}
+  try{
+    const cur = getCanary();
+    if(cur && n < cur.n && !DROP_OK) return;
+    document.cookie = CANARY+"="+n+"|"+Date.now()+";path=/;max-age=63072000;samesite=lax";
+  }catch(e){}
 }
+function rebaseCanary(){ DROP_OK = true; setCanary(ENTRIES.length); DROP_OK = false; }
 function getCanary(){
   try{
     const m = document.cookie.match(new RegExp(CANARY+"=([^;]*)"));
@@ -904,6 +938,13 @@ const $ = id=>document.getElementById(id);
    would have been stamped TOMORROW. Night trauma is exactly the data that matters. */
 const today = ()=>{ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+/* HTML escape. Imported records are UNTRUSTED text: a description of
+   <img src=x onerror=...> would otherwise execute in every list that renders it. */
+const ESC_MAP={"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"};
+const escH = v => String(v==null?"":v).replace(/[&<>"']/g, c=>ESC_MAP[c]);
+/* the "not today" warning under the date box must follow PROGRAMMATIC sets too */
+function syncDateNote(){ const n=$("date-note"), d=$("f-date");
+  if(n&&d) n.style.display = (d.value && d.value!==today()) ? "" : "none"; }
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.remove("hide");
   clearTimeout(t._x); t._x=setTimeout(()=>t.classList.add("hide"),1900); }
 function daysSince(ts){ return ts? Math.floor((Date.now()-ts)/86400000) : null; }
@@ -1046,6 +1087,13 @@ function fullSave(){
        both audited, differently. */
     r.id = prior.id;
     r.savedAt = prior.savedAt;
+    /* Setup says "old records keep what was true then" — so honour it. baseRecord()
+       stamped TODAY's site, initials, rank, billet and policy ceiling; an edit made
+       after a PCS, a promotion or a policy change would otherwise rewrite the very
+       variables the site/billet/policy analyses are stratified on. A deliberate site
+       override further down still wins. */
+    ["siteId","siteName","siteType","siteOverride","loggerId","loggerRank","loggerBillet",
+     "sitePolicyCeiling"].forEach(k=>{ if(prior[k]!==undefined) r[k]=prior[k]; });
     if(prior.stub){ r.completedAt = new Date().toISOString(); r.wasStub = true; }
     else { r.completedAt = prior.completedAt || null;
            r.wasStub = !!prior.wasStub;
@@ -1062,7 +1110,12 @@ function fullSave(){
     return v.length? v : null; })();
   r.minutes = parseInt($("f-mins").value,10)||null;
   (function(){ const os=$("f-site")? $("f-site").value : "";
-    if(os && os!==cfg().site){ r.siteId=os; r.siteName=os; r.siteType=siteTypeOf(os); r.siteOverride=true; } })();
+    if(os && os!==cfg().site){ r.siteId=os; r.siteName=os; r.siteType=siteTypeOf(os); r.siteOverride=true; }
+    else if(!os && prior && prior.siteOverride){
+      /* override cleared on purpose — fall back to the configured site. Without this
+         the historical restore above would pin the old override forever. */
+      const c=cfg(); r.siteId=c.site||""; r.siteName=siteLabel();
+      r.siteType=siteTypeOf(c.site||""); r.siteOverride=false; } })();
   r.simulated = !!FLAGS.sim;
   r.taught = !!FLAGS.teach;
   r.soloInRoom = !!FLAGS.solo;
@@ -1078,7 +1131,7 @@ function fullSave(){
      counted once — conservative, no inflation). */
   const offerICTL = !prior || prior.stub;   /* new save, or first completion of a stub */
   const codes = Array.from(new Set((r.procs||[]).map(p=>PROC_ICTL[p]).filter(Boolean)));
-  persist(); clearForm();
+  persist(); clearForm(wasEdit);
   toast(wasEdit ? "Completed ✓" : "Case saved ✓");
   if(codes.length && offerICTL){
     const names = codes.map(c=>{ const t=ICTL.find(x=>x.code===c); return t?t.name:c; });
@@ -1102,14 +1155,27 @@ function fullSave(){
   }
   if(wasEdit) show(ENTRIES.some(e=>e.stub) ? "todo" : "log");
 }
+const QC_UNITS = {"99140":2, "99100":1, "99116":5, "99135":5};
 function acuity(r){
-  if(r.activityType!=="OR" || !r.baseUnits) return null;
-  let a = r.baseUnits;
+  if(r.activityType!=="OR") return null;
+  /* base must be a real finite number. An IMPORTED record can carry "7" (string),
+     "7junk", -3 or Infinity; "7"+1 would silently become the string "71". */
+  const base = Number(r.baseUnits);
+  if(!isFinite(base) || base <= 0) return null;
+  let a = base;
   if(r.asaPS===3) a+=1; else if(r.asaPS===4) a+=2; else if(r.asaPS===5) a+=3;
-  (r.qc||[]).forEach(q=>{ a += q==="99140"?2 : q==="99100"?1 : 5; });
+  /* dedupe, and count ONLY the four codes that carry units — an unrecognised
+     code used to score +5 by falling through the ternary */
+  Array.from(new Set(r.qc||[])).forEach(q=>{ a += (QC_UNITS[String(q)] || 0); });
   return a;
 }
-function clearForm(){
+function clearForm(resetDate){
+  /* An edit or a stub completion sets the date box to that record's OLD date.
+     Leaving it there silently backdated the NEXT thing logged — a new case, a ward
+     ICTL, a missed opportunity, a no-case day. Deliberate backfill of several new
+     cases still keeps the date; only coming out of an edit resets it. */
+  if(resetDate && $("f-date")) $("f-date").value = today();
+  syncDateNote();
   PROCSEL.clear();
   ["f-cpt","f-base","f-cpt2","f-mins","f-desc","f-search"].forEach(i=>$(i).value="");
   if($("f-site")) $("f-site").value="";
@@ -1124,16 +1190,21 @@ function drawEditBar(){
   const b=$("editbar"); if(!b) return;
   if(!EDIT_ID){ b.innerHTML=""; return; }
   const e=ENTRIES.find(x=>x.id===EDIT_ID); if(!e){ b.innerHTML=""; return; }
-  b.innerHTML=`<div class="banner warn">✎ <b>${e.stub?"Completing a quick log":"Editing a saved record"}</b> from ${e.date} (${e.activityType}).
+  b.innerHTML=`<div class="banner warn">✎ <b>${e.stub?"Completing a quick log":"Editing a saved record"}</b> from ${escH(e.date)} (${escH(e.activityType)}).
     Saving will fill in that record, not create a new one.
     <button id="cancel-edit" class="chip sm" style="margin-left:8px">Cancel</button></div>`;
-  $("cancel-edit").onclick=()=>{ EDIT_ID=null; clearForm(); toast("Left it unfinished"); };
+  $("cancel-edit").onclick=()=>{ EDIT_ID=null; clearForm(true); toast("Left it unfinished"); };
 }
 function finishStub(id){
   const e = ENTRIES.find(x=>x.id===id); if(!e) return;
+  /* Clear FIRST. This screen used to inherit whatever was half-typed in the form —
+     another case's CPT, base units, description, ASA, autonomy and flags were
+     copied onto an unrelated stub. */
+  clearForm(true);
   EDIT_ID = id;
   ACT = e.activityType || "OR";
   $("f-date").value = e.date || today();
+  syncDateNote();
   drawActs(); drawAut(); drawPSQC(); drawEditBar();
   show("log");
   $("full").open = true;
@@ -1156,7 +1227,7 @@ function saveDay(type){
    Admin / training / leave records survive — the case happened alongside them. */
 function retireZeroDay(d){
   const before=ENTRIES.length;
-  ENTRIES=ENTRIES.filter(e=>!(e.kind==="zero" && e.date===d && CLINICAL_DAY[e.dayType||"CLIN"]));
+  forget(e=>!(e.kind==="zero" && e.date===d && CLINICAL_DAY[e.dayType||"CLIN"]));
   if(ENTRIES.length<before) toast("Removed the zero-day for "+d+" — a case was logged");
 }
 let MISS = {};
@@ -1256,15 +1327,15 @@ function drawTodo(){
   $("todobadge").classList.toggle("hide", stubs.length===0);
   $("todolist").innerHTML = stubs.length
     ? stubs.slice().reverse().map(e=>`<div class="item">
-        <div class="g"><b>${e.activityType} · ${e.date}</b><small>logged ${new Date(e.savedAt).toLocaleTimeString()}</small></div>
-        <button class="chip sm" data-fin="${e.id}" style="background:linear-gradient(180deg,var(--gold),var(--gold-deep));color:#1A1206;border-color:var(--gold);font-weight:800">Finish</button>
-        <button class="chip sm" data-del="${e.id}">✕</button>
+        <div class="g"><b>${escH(e.activityType)} · ${escH(e.date)}</b><small>logged ${new Date(e.savedAt).toLocaleTimeString()}</small></div>
+        <button class="chip sm" data-fin="${escH(e.id)}" style="background:linear-gradient(180deg,var(--gold),var(--gold-deep));color:#1A1206;border-color:var(--gold);font-weight:800">Finish</button>
+        <button class="chip sm" data-del="${escH(e.id)}">✕</button>
       </div>`).join("")
     : `<p class="hint" style="text-align:center;padding:20px 0">Nothing waiting. ✓</p>`;
   $("todolist").querySelectorAll("[data-fin]").forEach(b=>b.onclick=()=>finishStub(b.dataset.fin));
   $("todolist").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{
     if(!confirm("Delete this stub? The case will no longer be counted.")) return;
-    ENTRIES = ENTRIES.filter(x=>x.id!==b.dataset.del); persist();
+    forget(x=>x.id!==b.dataset.del); persist();
   });
 }
 
@@ -1372,7 +1443,7 @@ function exportJSON(){
   const stamp = today()+"_"+(siteLabel()||"NOSITE")+"_"+ENTRIES.length+"rec_v"+SCHEMA;
   download("caselog_"+stamp+".json", JSON.stringify(payload,null,1)).then(ok=>{
     if(!ok){ toast("Export cancelled — nothing saved"); return; }
-    lsSet(K_EXP, Date.now()); refreshAll();
+    lsSet(K_EXP, Date.now()); rebaseCanary(); refreshAll();
     toast("Exported "+ENTRIES.length+" records — now put it somewhere that is not this phone");
   });
 }
@@ -1388,7 +1459,10 @@ function exportCSV(){
   }).join(",")));
   download("caselog_"+today()+"_"+ENTRIES.length+"rec.csv", lines.join("\n"), "text/csv").then(ok=>{
     if(!ok){ toast("Export cancelled"); return; }
-    lsSet(K_EXP, Date.now()); refreshAll();
+    /* ⛔ deliberately does NOT stamp K_EXP. Restore reads JSON only, so a CSV is an
+       analysis file, not a backup — stamping it here let the backup warning go quiet
+       while the log had no restorable copy anywhere. */
+    toast("CSV saved — for analysis. It CANNOT be restored; still do a JSON backup.");
   });
 }
 $("file").onchange = function(){
@@ -1405,8 +1479,24 @@ $("file").onchange = function(){
         return;
       }
       const KINDS = {case:1, zero:1, missed:1, ictl:1};
-      const valid = r => r && typeof r==="object" && typeof r.id==="string" && KINDS[r.kind]
-        && /^\d{4}-\d{2}-\d{2}$/.test(r.date||"") && !(r.schemaVersion > SCHEMA);
+      /* own-property test: KINDS["constructor"] is inherited and TRUTHY, so a record
+         with kind:"constructor" used to pass as a valid record kind */
+      const isKind = k => typeof k==="string" && Object.prototype.hasOwnProperty.call(KINDS,k);
+      /* a real calendar date. The shape test alone accepted "2026-99-99". */
+      const realDate = d => {
+        if(typeof d!=="string" || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+        const p=d.split("-").map(Number), t=new Date(Date.UTC(p[0],p[1]-1,p[2]));
+        return t.getUTCFullYear()===p[0] && t.getUTCMonth()===p[1]-1 && t.getUTCDate()===p[2];
+      };
+      /* schemaVersion must be a NUMBER we understand. "future" > 3 is false, so a
+         string version slipped straight past the newer-file guard. */
+      const okVer = v => v==null || (typeof v==="number" && isFinite(v) && v<=SCHEMA);
+      /* JSON.parse makes __proto__ an OWN key; Object.assign would then reset a
+         prototype when the record is opened for editing */
+      const stripProto = o => { if(o && typeof o==="object"
+        && Object.prototype.hasOwnProperty.call(o,"__proto__")) delete o["__proto__"]; return o; };
+      const valid = r => r && typeof r==="object" && typeof r.id==="string" && r.id.trim()!==""
+        && isKind(r.kind) && realDate(r.date) && okVer(r.schemaVersion);
       const bad = rows.filter(r=>!valid(r));
       if(bad.length && !confirm(bad.length+" of "+rows.length+" rows are not valid case-log records and will be SKIPPED.\n\nContinue?")) return;
       const mine = (cfg().logger||"").trim().toUpperCase();
@@ -1419,10 +1509,21 @@ $("file").onchange = function(){
           +"Pooling exports is done on the computer with merge_v3.py, not here.\n\nImport them anyway?")) return;
       }
       const have = new Set(ENTRIES.map(e=>e.id));
-      let added=0;
-      good.forEach(r=>{ if(!have.has(r.id)){ ENTRIES.push(r); added++; } });
+      let added=0, dupes=0;
+      good.forEach(r=>{
+        /* `have` MUST grow as we go: without this, two rows carrying the same id
+           both entered the log from a single file */
+        if(have.has(r.id)){ dupes++; return; }
+        stripProto(r); stripProto(r.autonomy);
+        ENTRIES.push(r); have.add(r.id); added++;
+      });
       if(p.config && !cfg().site) setCfg(p.config);
-      persist(); alert("Restored. "+added+" new records added ("+rows.length+" in file).");
+      persist();
+      alert("Restored. "+added+" new records added ("+rows.length+" in file)."
+        +(dupes? "\n"+dupes+" row"+(dupes>1?"s":"")+" skipped as duplicate ids." : "")
+        +(bad.length? "\n"+bad.length+" row"+(bad.length>1?"s":"")+" skipped as invalid." : "")
+        +"\n\nNOTE: importing only ADDS records it has never seen. It does not update a"
+        +" record you have since corrected here, and it can bring back one you deleted.");
     }catch(e){ alert("Could not read that file."); }
   };
   rd.readAsText(f); this.value="";
@@ -1535,9 +1636,9 @@ function drawRecList(){
     return (e.stub?"◷ Stub · ":"")+(e.activityType||"?")+(e.cpt?" · "+e.cpt:"")+(e.description?" · "+e.description:"")+(e.simulated?" (SIM)":"");
   };
   el.innerHTML=rows.map(e=>`<div class="item">
-    <div class="g"><b>${label(e)}</b><small>${e.date||""}${e.editedAt?" · edited":""}${e.wasStub&&!e.stub?" · was stub":""}</small></div>
-    ${e.kind==="case"?`<button class="chip sm" data-editrec="${e.id}">${e.stub?"Finish":"Edit"}</button>`:""}
-    <button class="chip sm" data-delrec="${e.id}">✕</button>
+    <div class="g"><b>${escH(label(e))}</b><small>${escH(e.date||"")}${e.editedAt?" · edited":""}${e.wasStub&&!e.stub?" · was stub":""}</small></div>
+    ${e.kind==="case"?`<button class="chip sm" data-editrec="${escH(e.id)}">${e.stub?"Finish":"Edit"}</button>`:""}
+    <button class="chip sm" data-delrec="${escH(e.id)}">✕</button>
   </div>`).join("") + (all.length>REC_SHOW ? `<button class="chip sm wide" id="rec-more" style="margin-top:8px">Show ${Math.min(50, all.length-REC_SHOW)} more (${all.length-REC_SHOW} older)</button>` : "");
   const more=$("rec-more"); if(more) more.onclick=()=>{ REC_SHOW+=50; drawRecList(); };
   el.querySelectorAll("[data-editrec]").forEach(b=>b.onclick=()=>editRecord(b.dataset.editrec));
@@ -1547,15 +1648,17 @@ function drawRecList(){
     if(!confirm("Delete this record permanently?\n\n"+label(e)+" · "+(e.date||"")
         +(kids.length? "\n\nAlso removes "+kids.length+" ICTL credit"+(kids.length>1?"s":"")+" that came from this case.":"")
         +"\n\nThere is no undo.")) return;
-    ENTRIES=ENTRIES.filter(x=>x.id!==e.id && !(x.kind==="ictl" && x.fromCaseId===e.id)); persist(); drawRecList(); drawHealth();
+    forget(x=>x.id!==e.id && !(x.kind==="ictl" && x.fromCaseId===e.id)); persist(); drawRecList(); drawHealth();
     toast(kids.length? "Deleted + "+kids.length+" ICTL credit"+(kids.length>1?"s":"") : "Deleted");
   });
 }
 function editRecord(id){
   const e=ENTRIES.find(x=>x.id===id); if(!e || e.kind!=="case") return;
+  clearForm(true);
   EDIT_ID=id;
   ACT=e.activityType||"OR";
   $("f-date").value=e.date||today();
+  syncDateNote();
   $("f-cpt").value=e.cpt||""; $("f-base").value=e.baseUnits!=null?e.baseUnits:"";
   $("f-cpt2").value=(e.cptSecondary||[]).join(", ");
   $("f-mins").value=e.minutes!=null?e.minutes:"";
@@ -1651,15 +1754,37 @@ $("btn-help").onclick=tourStart;
 (async function(){
   await idbOpen();
   load();
-  // recover from localStorage loss using the IndexedDB mirror
-  if(!ENTRIES.length){
+  /* Recover from the IndexedDB mirror. This used to run ONLY when localStorage was
+     completely empty — but a save can fail on quota AFTER the mirror write succeeded,
+     which leaves localStorage merely BEHIND, and a non-empty stale copy then beat the
+     good one on every boot. Union by id: never lose either side. */
+  {
     const mirror = await idbGet("entries");
-    if(mirror && mirror.length){
-      ENTRIES = mirror; lsSet(K_MAIN, ENTRIES);
-      setTimeout(()=>alert("Recovered "+mirror.length+" records from the backup store.\n"+
-        "Local storage had been cleared. EXPORT NOW."),400);
+    if(Array.isArray(mirror) && mirror.length){
+      const known = new Set(ENTRIES.map(e=>e&&e.id));
+      const extra = mirror.filter(e=> e && e.id && !known.has(e.id));
+      if(extra.length){
+        const wasEmpty = !ENTRIES.length;
+        ENTRIES = ENTRIES.concat(extra); lsSet(K_MAIN, ENTRIES);
+        setTimeout(()=>alert("Recovered "+extra.length+" record"+(extra.length>1?"s":"")+
+          " from the backup store"+(wasEmpty? " — local storage had been cleared."
+          : " that were missing from this phone's main storage.")+"\n\nEXPORT NOW."),400);
+      }
     }
   }
+  /* Another window of this app just wrote. Fold in what it added so two instances
+     converge, instead of the next save here erasing its records. */
+  window.addEventListener("storage", ev=>{
+    if(ev.key!==K_MAIN) return;
+    try{
+      const other = JSON.parse(ev.newValue||"[]");
+      if(!Array.isArray(other)) return;
+      const mine = new Set(ENTRIES.map(e=>e&&e.id));
+      const extra = other.filter(e=> e && e.id && !mine.has(e.id) && !DELETED.has(e.id));
+      if(extra.length){ ENTRIES = ENTRIES.concat(extra); refreshAll();
+        toast(extra.length+" record"+(extra.length>1?"s":"")+" from another window"); }
+    }catch(e){}
+  });
   if(navigator.storage && navigator.storage.persist){
     navigator.storage.persisted().then(p=> p||navigator.storage.persist())
       .then(v=>{ $("persisted").textContent = v? "granted" : "not granted"; })
@@ -1707,10 +1832,9 @@ $("btn-help").onclick=tourStart;
   drawInstall();
 
   $("f-date").value = today();
-  const noteDate = ()=>{ const n=$("date-note");
-    if(n) n.style.display = ($("f-date").value && $("f-date").value!==today()) ? "" : "none"; };
-  $("f-date").addEventListener("input", noteDate);
-  $("f-date").addEventListener("change", noteDate);
+  $("f-date").addEventListener("input", syncDateNote);
+  $("f-date").addEventListener("change", syncDateNote);
+  syncDateNote();
   const c = cfg();
   $("hsub").textContent = (siteLabel()||"NO SITE") + (siteTypeOf(cfg().site) ? " · "+siteTypeOf(cfg().site) : "");
   (function popCaseSite(){
