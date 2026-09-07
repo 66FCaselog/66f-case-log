@@ -739,7 +739,7 @@ const PROCS = {
   ["DVT_US","DVT — 2-region compression"],["SOFT_US","Soft tissue / abscess"],
   ["VASC_US","Vascular access guidance"],["OTHER_US","Other exam"]],
  TRAUMA_BAY: [
-  ["ATLS_PRIMARY","Primary ATLS team member"],["ATLS_AIRWAY","Primary airway provider"],
+  ["ATLS_PRIMARY","Primary ATLS team member"],["ATLS_AIRWAY","Primary airway provider"],["ATLS_SECONDARY","Secondary team member — assisted"],["ATLS_OBSERVER","Observer only — not involved"],["PRIMARY_SURVEY","Performed the primary survey"],
   ["RSI","RSI / intubation"],["CRIC","Surgical airway (cric)"],
   ["NEEDLE_D","Needle decompression"],["THORACOSTOMY","Finger / tube thoracostomy"],
   ["IO","IO access"],["CVL_US","Central line — US-guided"],
@@ -751,14 +751,16 @@ const PROCS = {
   ["REBOA_ASSIST","REBOA — assist / monitor"],
   ["THORACOTOMY_A","Resuscitative thoracotomy — assist"],["TRIAGE","Multi-casualty triage"]],
  ICU: [
-  ["VENT","Ventilator management"],["SEDATION","Sedation / analgesia titration"],
+  ["ROUNDED","Rounded / presented on the patient"],["VENT","Ventilator management"],["SEDATION","Sedation / analgesia titration"],
   ["PRESSORS","Vasopressor / inotrope titration"],["ICU_INTUB","Intubation in ICU"],
   ["DIFF_AIRWAY","Difficult airway response"],["ALINE","Arterial line"],
   ["CVL_US","Central line — US-guided"],["CVL_LM","Central line — landmark"],
   ["BRONCH","Bronchoscopy"],["CRRT","CRRT management"],
   ["BLOOD","Blood product administration"],["MTP_PRIMARY","MTP — primary provider"],
   ["MTP_SUPPORT","MTP — support role"],["ICU_POCUS","ICU ultrasound (heart/lung/IVC)"],
-  ["CC_TRANSPORT","Critical care transport"]]
+  ["CC_TRANSPORT","Critical care transport"],
+    ["PT_SHOCK_H","Patient — haemorrhagic shock"],["PT_SHOCK_C","Patient — cardiogenic / obstructive shock"],["PT_SEPSIS","Patient — septic shock"],
+    ["PT_ARDS","Patient — ARDS / severe hypoxaemia"],["PT_TBI","Patient — severe TBI / ICP management"],["PT_ECMO","Patient — ECMO"],["PT_BURN_ICU","Patient — major burn"],["PT_PROLONGED","Patient — prolonged hold (> 24 h before definitive care)"]]
 };
 /* proc id -> official 66F ICTL task it evidences */
 const PROC_ICTL = {
@@ -770,8 +772,8 @@ const PROC_HINTS = {
   OR:"Optional descriptors \u2014 tap what applies. This is where the exposure hides: a CPT can\u2019t show a TIVA, an awake fiberoptic, an intraop MTP, or a pediatric patient.",
   REGIONAL:"Tap every block performed, plus guidance and single-shot vs catheter.",
   POCUS:"Tap every exam. Practice scans count \u2014 note it in the description.",
-  TRAUMA_BAY:"\u2605 = official 66F ICTL task. Log those in the ICTL tab too \u2014 the tallies are kept separate on purpose.",
-  ICU:"Activity descriptors, not an official Army task list. \u2605 items are 66F ICTL tasks \u2014 log those in the ICTL tab too."
+  TRAUMA_BAY:"Start with your ROLE (primary / airway / secondary / observer), then what you did. \u2605 = official 66F ICTL task. Log those in the ICTL tab too \u2014 the tallies are kept separate on purpose.",
+  ICU:"Activity descriptors, not an official Army task list. Tap what YOU did and what the PATIENT was \u2014 \u201crounded on a ventilated patient in cardiogenic shock\u201d is three taps. \u2605 items are 66F ICTL tasks \u2014 log those in the ICTL tab too."
 };
 const PHASE_SETS    = {
  OR:["Pre-op plan","Induction","Maintenance","Crisis","Emergence"],

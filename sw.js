@@ -5,7 +5,10 @@
    entries live in localStorage + IndexedDB on the device and are never
    transmitted anywhere. There is no network endpoint in this application. */
 
-const CACHE = "66f-caselog-v3.6.6-codebook"; /* v3.6.6: versioned CODEBOOK stamped on every record; autonomy
+const CACHE = "66f-caselog-v3.6.7-nonor"; /* v3.6.7: non-OR detail — trauma-bay ROLE ladder (primary / airway /
+   secondary / observer / primary survey), ICU "rounded / presented" + preliminary patient-acuity descriptors
+   (shock type, ARDS, TBI, ECMO, burn, prolonged hold); the workbook now prints every descriptor.
+   v3.6.6: versioned CODEBOOK stamped on every record; autonomy
    duration rule + "why was the attending present"; ICTL performed/assisted/observed + success (only performed
    counts); stubs can be closed as unrecoverable (still a case); "case weight (acuity)" wording; model cited.
    v3.6.5: capture discipline + billet framing — FTE in
