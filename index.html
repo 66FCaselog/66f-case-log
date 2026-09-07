@@ -264,6 +264,12 @@ details.sub[open]>summary{margin-bottom:10px}
       somewhere else — the site is stamped per record and can never be corrected downstream.</p>
     </details>
 
+    <details class="sub" open id="indication-block"><summary>Indication — why the case happened</summary>
+      <div class="chips" id="indrow"></div>
+      <p class="hint">A CPT code cannot tell a trauma ex-lap from an elective one. One tap here is
+      what turns “67 abdominal cases” into “41 trauma laparotomies”. No diagnosis, no identifiers.</p>
+    </details>
+
     <details class="sub" open id="acuity-block"><summary>Acuity</summary>
       <div>
       <label>ASA physical status</label>
@@ -763,6 +769,26 @@ const BU_YEAR   = "CY2022 file (unchanged through 2026)";
 const K_CFG  = "crna_caselog_v3_cfg";
 const K_EXP  = "crna_caselog_v3_lastexport";
 const CANARY = "clv3_canary";
+/* WHY the case happened. An anesthesia CPT is ANATOMIC, not indication-based: 00790 is a
+   trauma ex-lap AND an elective sigmoid colectomy; 00210 is a decompressive crani AND a
+   tumour resection. Same code, same base units, same acuity. For a wartime-relevance
+   argument the indication carries most of the weight, and one tap costs nothing.
+   ⛔ Deliberately NOT ICD-10: that needs the chart, kills 5-second capture, and puts a
+   diagnosis on a phone — which would change this app's whole PHI posture. */
+const INDICATIONS = [
+  ["TRAUMA_PEN",  "Trauma — penetrating", "trauma (pen)"],
+  ["TRAUMA_BLUNT","Trauma — blunt",       "trauma (blunt)"],
+  ["BURN",        "Burn",                 "burn"],
+  ["INFECTION",   "Infection / sepsis",   "infection"],
+  ["VASCULAR",    "Vascular / ischaemic", "vascular"],
+  ["ONC",         "Oncologic / tumour",   "oncologic"],
+  ["OB",          "Obstetric",            "obstetric"],
+  ["ELECTIVE",    "Non-trauma / elective","non-trauma"],
+  ["OTHER_IND",   "Other",                "other"]
+];
+const IND_LABEL = Object.fromEntries(INDICATIONS.map(i=>[i[0], i[1]]));
+const IND_SHORT = Object.fromEntries(INDICATIONS.map(i=>[i[0], i[2]]));
+const TRAUMA_IND = new Set(["TRAUMA_PEN","TRAUMA_BLUNT","BURN"]);
 const ACTS = [
   ["OR","OR case","Full anesthetic. Acuity applies."],
   ["REGIONAL","Regional / APS","Blocks and acute pain. Counted, not acuity-weighted."],
@@ -1011,6 +1037,8 @@ function drawActs(){
   if(qb) qb.textContent = "\u26A1 QUICK LOG \u2014 " + (hit?hit[1]:ACT);   /* text: ACT can come from an import */
   const blk = $("acuity-block");
   if(blk) blk.style.display = (ACT==="OR") ? "" : "none";
+  const ib = $("indication-block");
+  if(ib) ib.style.display = (ACT==="OR") ? "" : "none";
   const cb = $("cpt-block");
   if(cb) cb.style.display = (ACT==="OR") ? "" : "none";
   drawProcs();
@@ -1063,6 +1091,15 @@ function drawAut(){
 
 /* ══════════════════ render: PS / QC ══════════════════ */
 let PS=null, QC={};
+let IND = null;
+function drawInd(){
+  const el = $("indrow"); if(!el) return;
+  el.innerHTML = INDICATIONS.map(o=>`<button class="chip sm${IND===o[0]?" on":""}" data-ind="${o[0]}">${escH(o[1])}</button>`).join("");
+  el.querySelectorAll("[data-ind]").forEach(b=>b.onclick=()=>{
+    IND = (IND===b.dataset.ind) ? null : b.dataset.ind;   /* tap again to clear */
+    drawInd();
+  });
+}
 function drawPSQC(){
   $("ps").innerHTML = PS_OPTS.map(o=>`<button class="chip sm${PS===o[0]?" on":""}" data-ps="${o[0]}">${o[1]}</button>`).join("");
   $("ps").querySelectorAll("[data-ps]").forEach(b=>b.onclick=()=>{ PS = PS===b.dataset.ps?null:b.dataset.ps; drawPSQC(); });
@@ -1168,6 +1205,7 @@ function fullSave(){
          the historical restore above would pin the old override forever. */
       const c=cfg(); r.siteId=c.site||""; r.siteName=siteLabel();
       r.siteType=siteTypeOf(c.site||""); r.siteOverride=false; } })();
+  r.indication = (ACT==="OR" && IND) ? IND : null;
   r.simulated = !!FLAGS.sim;
   r.taught = !!FLAGS.teach;
   r.soloInRoom = !!FLAGS.solo;
@@ -1234,8 +1272,8 @@ function clearForm(resetDate){
   PROCSEL.clear();
   ["f-cpt","f-base","f-cpt2","f-mins","f-desc","f-search"].forEach(i=>$(i).value="");
   if($("f-site")) $("f-site").value="";
-  PS=null; QC={}; AUT={}; FLAGS={};
-  drawPSQC(); drawAut();
+  PS=null; QC={}; AUT={}; FLAGS={}; IND=null;
+  drawPSQC(); drawAut(); drawInd();
   document.querySelectorAll("[data-flag]").forEach(b=>b.classList.remove("on"));
   $("searchres").innerHTML="";
   $("full").open=false;
@@ -1565,7 +1603,7 @@ function exportJSON(){
 function exportCSV(){
   const cols = ["id","schemaVersion","kind","stub","date","savedAt","activityType","siteId","siteName",
     "loggerId","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description",
-    "asaPS","qc","acuity","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
+    "asaPS","qc","acuity","indication","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
     "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet"];
   const esc = v => v==null? "" : /[",\n]/.test(String(v))? '"'+String(v).replace(/"/g,'""')+'"' : String(v);
   const lines = [cols.join(",")].concat(ENTRIES.map(e=>cols.map(c=>{
@@ -1633,6 +1671,7 @@ $("file").onchange = function(){
         r.siteOverride=!!r.siteOverride;
         if(r.kind==="case"){
           if(!ACT_IDS.has(r.activityType)){ r.activityType="OTHER"; r._activityCoerced=true; }
+          if(r.indication!=null && !IND_LABEL[r.indication]) r.indication=null;   /* closed list */
           r.qc = strs(r.qc); r.procs = strs(r.procs).length ? strs(r.procs) : null;
           r.cptSecondary = strs(r.cptSecondary).length ? strs(r.cptSecondary) : null;
           r.baseUnits = num(r.baseUnits,0.5,60); r.minutes = num(r.minutes,0,1440,true);
@@ -1801,7 +1840,7 @@ function drawRecList(){
     if(e.kind==="zero")   return "🌑 Day: "+(DAY_TYPES[e.dayType||"CLIN"]||e.dayType);
     if(e.kind==="missed") return "⚠ Missed: "+(e.missedTask||"")+" · "+(MISS_REASONS[e.missedReason]||e.missedReason||"")+(e.missedWho?" · did it: "+(MISS_WHO[e.missedWho]||e.missedWho):"")+(e.missedAsked==="ASKED"?" · asked, declined":"");
     if(e.kind==="ictl")   return "✓ ICTL: "+(e.task||"")+(e.simulated?" (SIM)":"");
-    return (e.stub?"◷ Stub · ":"")+(e.activityType||"?")+(e.cpt?" · "+e.cpt:"")+(e.description?" · "+e.description:"")+(e.simulated?" (SIM)":"");
+    return (e.stub?"◷ Stub · ":"")+(e.activityType||"?")+(e.cpt?" · "+e.cpt:"")+(e.indication?" · "+(IND_SHORT[e.indication]||e.indication):"")+(e.description?" · "+e.description:"")+(e.simulated?" (SIM)":"");
   };
   el.innerHTML=rows.map(e=>`<div class="item">
     <div class="g"><b>${escH(label(e))}</b><small>${escH(e.date||"")}${e.editedAt?" · edited":""}${e.wasStub&&!e.stub?" · was stub":""}</small></div>
@@ -1836,11 +1875,12 @@ function editRecord(id){
   if($("f-site")) $("f-site").value = (e.siteOverride && e.siteId)? e.siteId : "";
   $("f-desc").value=e.description||"";
   PS = e.asaPS? String(e.asaPS) : null;
+  IND = e.indication || null;
   QC = {}; (e.qc||[]).forEach(q=>QC[q]=true);
   AUT = Object.assign({}, e.autonomy||{});
   FLAGS = {sim:!!e.simulated, teach:!!e.taught, solo:!!e.soloInRoom};
   PROCSEL = new Set(e.procs||[]);
-  drawActs(); drawPSQC(); drawAut(); drawEditBar();
+  drawActs(); drawPSQC(); drawAut(); drawInd(); drawEditBar();
   // repaint autonomy selections
   const phases=PHASE_SETS[ACT]||PHASE_SETS.OTHER;
   document.querySelectorAll("#autrows .aut").forEach((row,i)=>{
@@ -2006,6 +2046,7 @@ $("btn-help").onclick=tourStart;
   drawInstall();
 
   $("f-date").value = today();
+  drawInd();
   $("f-date").addEventListener("input", syncDateNote);
   $("f-date").addEventListener("change", syncDateNote);
   syncDateNote();

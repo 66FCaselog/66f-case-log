@@ -5,7 +5,11 @@
    entries live in localStorage + IndexedDB on the device and are never
    transmitted anywhere. There is no network endpoint in this application. */
 
-const CACHE = "66f-caselog-v3.6.3-firstrun"; /* v3.6.3: nothing saves before Setup (gate replaces the
+const CACHE = "66f-caselog-v3.6.4-indication"; /* v3.6.4: INDICATION — one tap on OR cases for why
+   the case happened (trauma pen/blunt, burn, infection, vascular, oncologic, obstetric, non-trauma,
+   other). An anesthesia CPT is anatomic: 00790 is a trauma ex-lap AND an elective colectomy. Closed
+   list, no ICD-10, no diagnosis, no identifiers. Carried into CSV, workbook and dashboard.
+   v3.6.3: nothing saves before Setup (gate replaces the
    banner); first-run checklist (Setup · installed · one export · one test restore · reminder); "My month"
    counts card on Data; exports carry deleted ids and merge_v3/build_dashboard honour them.
    v3.6.2: second-pass fixes — persisted deletion tombstones
