@@ -385,6 +385,7 @@ details.sub[open]>summary{margin-bottom:10px}
 <!-- ═══════════════ DATA ═══════════════ -->
 <section id="v-data" class="hide">
   <h2 style="margin:4px 0 10px">Data</h2>
+  <div class="card gold" id="mymonth"></div>
   <div class="card" id="health"></div>
   <details class="sub" open style="margin-top:16px"><summary>Recent records — tap to edit</summary>
   <div id="reclist"></div>
@@ -948,6 +949,16 @@ function setCfg(o){ lsSet(K_CFG,o); idbPut("cfg",o); }
 function needsFreeText(id){ return /OTHER$/.test(id||""); }
 function siteLabel(){ const c=cfg(); if(!c.site) return "";
   return needsFreeText(c.site) ? (c.siteOther||c.site) : c.site; }
+/* Nothing is saved until Setup is complete. A record stamped with a blank logger or site
+   can never be attributed afterwards — the banner that used to warn about it became
+   wallpaper. Refuse, and take the person to Setup. */
+function gateSetup(){
+  const m = cfgMissing();
+  if(!m.length) return true;
+  toast("Set "+m.join(", ")+" in Setup first — nothing saved");
+  show("setup");
+  return false;
+}
 function cfgMissing(){
   const c=cfg(), m=[];
   if(!c.site) m.push("site");
@@ -1095,6 +1106,7 @@ function baseRecord(kind){
   };
 }
 function quickLog(){
+  if(!gateSetup()) return;
   const r = baseRecord("case");
   r.date = today();   /* quick log = happening NOW; never inherit a backfill date */
   r.stub = true;
@@ -1107,6 +1119,7 @@ function formDirty(){
     || $("f-cpt2").value.trim() || $("f-mins").value.trim() || PS || Object.keys(AUT).length || PROCSEL.size);
 }
 function fullSave(){
+  if(!gateSetup()) return;
   const prior = EDIT_ID ? ENTRIES.find(e=>e.id===EDIT_ID) : null;
   /* A "complete" case with nothing in it is worse than a stub: it leaves the queue,
      counts as complete in every analysis, and carries no detail. Refuse. */
@@ -1244,6 +1257,7 @@ function drawEditBar(){
 function finishStub(id){ editRecord(id); }
 function zeroDay(){ $("zero-form").classList.toggle("hide"); }
 function saveDay(type){
+  if(!gateSetup()) return;
   const d = $("f-date").value || today();
   if(ENTRIES.some(e=>e.kind==="zero" && e.date===d)){ toast("A day record already exists for "+d); return; }
   /* a clinical no-case day cannot coexist with a case; an admin/training/leave record can
@@ -1287,6 +1301,7 @@ $("m-who").onclick    = missPick($("m-who"),"who");
 $("m-reason").onclick = missPick($("m-reason"),"reason");
 $("btn-missed-cancel").onclick = ()=>$("missed-form").classList.add("hide");
 $("btn-missed-save").onclick = function(){
+  if(!gateSetup()) return;
   const what = $("m-task").value.trim();
   if(!MISS.elig){ toast("Answer question 1 first"); return; }
   if(MISS.elig==="NA"){ toast("Not available = not a missed opportunity. Nothing logged."); $("missed-form").classList.add("hide"); return; }
@@ -1316,6 +1331,7 @@ function drawICTL(){
 }
 function ictlName(i){ return ICTL[i].name; }
 function logICTL(){
+  if(!gateSetup()) return;
   if(ICTL_SEL===null){ toast("Pick a task first"); return; }
   const d = $("f-date").value || today();
   const prior = ENTRIES.filter(e=>e.kind==="ictl" && e.taskIndex===ICTL_SEL && e.date===d);
@@ -1383,11 +1399,43 @@ function exportOverdue(){
   const worthProtecting = ENTRIES.length >= 5 || dataAgeDays >= 3;
   return worthProtecting && (d===null || d>=7);
 }
+const K_CHK = "crna_caselog_v3_checklist";
+/* First-run checklist. Each line is the source of one real data-loss story: no Setup =
+   unattributable records; not installed = Safari purges the tab; never exported = a lost
+   phone loses everything; never restored = a backup nobody has proved works. Auto-ticks
+   where the app can see it; two are honest self-ticks. Disappears when complete. */
+function checklist(){
+  const ck = lsGet(K_CHK,{})||{};
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || !!navigator.standalone;
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent||"");
+  return [
+    {k:"setup",    done:!cfgMissing().length,            label:"Setup — site, initials, rank, duty position, policy ceiling", go:"setup"},
+    {k:"install",  done:standalone || !!ck.installSkipped, label: isIOS ? "Installed to the Home Screen (required on iPhone)" : "Installed to the home screen", skip: !isIOS && !standalone ? "Using it on a computer" : null},
+    {k:"export",   done:lastExport()!=null,               label:"One JSON export, saved somewhere that is not this phone", go:"data"},
+    {k:"restored", done:!!ck.restored,                    label:"One test restore from that export (proves the backup works)", go:"data"},
+    {k:"reminder", done:!!ck.reminder,                    label:"Weekly export reminder on the calendar", go:"data", self:"Added it"}
+  ];
+}
+function drawChecklist(){
+  const items = checklist(); const left = items.filter(i=>!i.done);
+  if(!left.length) return "";
+  return `<div class="card" id="checklist" style="margin-bottom:12px"><b>Before you log — ${items.length-left.length} of ${items.length} done</b>
+    <div style="margin-top:8px;font-size:14px;line-height:1.7">` + items.map(i=>
+      `<div>${i.done?"✅":"⬜"} ${i.label}` +
+      (!i.done && i.go ? ` <button class="chip sm" data-chk-go="${i.go}">→</button>` : "") +
+      (!i.done && i.self ? ` <button class="chip sm" data-chk-self="${i.k}">${i.self}</button>` : "") +
+      (!i.done && i.skip ? ` <button class="chip sm" data-chk-skip="${i.k}">${i.skip}</button>` : "") + `</div>`).join("") +
+    `</div><p class="hint" style="margin:8px 0 0">Nothing saves until Setup is done. The rest are the four ways this data gets lost.</p></div>`;
+}
+function wireChecklist(){
+  document.querySelectorAll("[data-chk-go]").forEach(b=>b.onclick=()=>show(b.dataset.chkGo));
+  document.querySelectorAll("[data-chk-self]").forEach(b=>b.onclick=()=>{ const ck=lsGet(K_CHK,{})||{}; ck[b.dataset.chkSelf]=true; lsSet(K_CHK,ck); refreshAll(); });
+  document.querySelectorAll("[data-chk-skip]").forEach(b=>b.onclick=()=>{ const ck=lsGet(K_CHK,{})||{}; ck.installSkipped=true; lsSet(K_CHK,ck); refreshAll(); });
+}
 function drawAlerts(){
   const box = $("alerts"); let h="";
-  const miss = cfgMissing();
-  if(miss.length) h += `<div class="banner bad">⚠ <b>${miss.join(", ")}</b> not set.
-    Cases saved now are stamped blank and <b>cannot be attributed later</b>. → Setup.</div>`;
+  const miss = cfgMissing();               /* still drives the Setup badge colour below */
+  h += drawChecklist();
   /* Export nag, deliberately NOT on day one. A banner that fires before there is
      anything worth losing becomes wallpaper, and then the real alarms get ignored too.
      Threshold: 5+ records, or any data older than 3 days. */
@@ -1405,6 +1453,7 @@ function drawAlerts(){
     h += `<div class="banner bad">🚨 <b>Entry count dropped: ${can.n} → ${ENTRIES.length}.</b>
       Storage may have been cleared. <b>Do not log more.</b> Restore from your last backup first.</div>`;
   box.innerHTML = h;
+  wireChecklist();
   const gt=$("go-todo"); if(gt) gt.onclick=()=>show("todo");
   syncBadge();
   const badge = $("hbadge");
@@ -1413,7 +1462,36 @@ function drawAlerts(){
   badge.style.background = miss.length? "#3A1614" : "#1E1E22";
   badge.style.color = miss.length? "#FFD9D6" : "var(--gold)";
 }
+/* What the logger gets back. Counts only — deliberately no autonomy average and no
+   acuity mean, so it cannot become a scoreboard. Capturable ICTL (7) and TO&E (3)
+   are never summed. */
+function monthStats(ym){
+  const inM = ENTRIES.filter(e=>e && (e.date||"").slice(0,7)===ym);
+  const cases = inM.filter(e=>e.kind==="case"), stubs=cases.filter(e=>e.stub);
+  const days = new Set(inM.map(e=>e.date)).size;
+  const zero = inM.filter(e=>e.kind==="zero");
+  const leave = zero.filter(e=>e.dayType==="LEAVE").length;
+  const ictl = inM.filter(e=>e.kind==="ictl" && !e.simulated);
+  const capt = ICTL.filter(t=>t.capturable);
+  const captHit = capt.filter(t=>ictl.some(e=>e.taskIndex===ICTL.indexOf(t))).length;
+  const credits = ictl.reduce((s,e)=>s+((Number.isInteger(e.count)&&e.count>0)?e.count:1),0);
+  return {cases:cases.length, complete:cases.length-stubs.length, stubs:stubs.length, days, zero:zero.length, leave,
+          missed:inM.filter(e=>e.kind==="missed").length, captHit, captN:capt.length, credits, sim:inM.filter(e=>e.kind==="case"&&e.simulated).length};
+}
+function drawMyMonth(){
+  const el=$("mymonth"); if(!el) return;
+  const now=new Date(), ym=today().slice(0,7);
+  const prev=new Date(now.getFullYear(), now.getMonth()-1, 1); const pym=prev.getFullYear()+"-"+String(prev.getMonth()+1).padStart(2,"0");
+  const m=monthStats(ym), p=monthStats(pym);
+  const name=now.toLocaleString(undefined,{month:"long"}), pname=prev.toLocaleString(undefined,{month:"long"});
+  const line=(s)=>`${s.cases} case${s.cases===1?"":"s"}${s.stubs?` (${s.stubs} unfinished)`:""}${s.sim?` · ${s.sim} sim`:""} · ${s.days} day${s.days===1?"":"s"} logged${s.zero?` · ${s.zero} no-case`:""}${s.leave?` (${s.leave} leave)`:""}
+    · ICTL ${s.captHit}/${s.captN} tasks${s.credits?` (${s.credits} credit${s.credits===1?"":"s"})`:""}${s.missed?` · ${s.missed} missed opp${s.missed===1?"":"s"}`:""}`;
+  el.innerHTML = `<b>My ${name}</b><div style="margin-top:6px;font-size:14px;line-height:1.6">${escH(line(m))}</div>`
+    + (p.cases||p.days ? `<div class="hint" style="margin-top:6px">${escH(pname)}: ${escH(line(p))}</div>` : "")
+    + `<p class="hint" style="margin:8px 0 0">Counts, not scores — the analysis happens quarterly, on the pooled data.</p>`;
+}
 function drawHealth(){
+  drawMyMonth();
   const d = daysSince(lastExport()), can=getCanary();
   const rows = [
     ["Entries in this browser", ENTRIES.length],
@@ -1467,12 +1545,16 @@ function exportReminder(){
     "BEGIN:VALARM","TRIGGER:-PT0M","ACTION:DISPLAY","DESCRIPTION:Export 66F Case Log","END:VALARM",
     "END:VEVENT","END:VCALENDAR"].join("\r\n");
   download("66F_CaseLog_weekly_export.ics", ics, "text/calendar");
+  try{ const ck=lsGet(K_CHK,{})||{}; ck.reminder=true; lsSet(K_CHK,ck); }catch(e){}
   toast("Open the downloaded .ics to add it to your calendar");
 }
 function exportJSON(){
   const c = cfg();
   const payload = { schemaVersion:SCHEMA, exportedAt:new Date().toISOString(),
-    site:siteLabel(), logger:c.logger||"", count:ENTRIES.length, config:c, entries:ENTRIES };
+    site:siteLabel(), logger:c.logger||"", count:ENTRIES.length, config:c, entries:ENTRIES,
+    /* ids deleted on this phone. Without this, an OLDER export still holding a record you
+       have since removed would bring it back in merge_v3.py / build_dashboard.py. */
+    deleted: Array.from(DELETED) };
   const stamp = today()+"_"+(siteLabel()||"NOSITE")+"_"+ENTRIES.length+"rec_v"+SCHEMA;
   download("caselog_"+stamp+".json", JSON.stringify(payload,null,1)).then(ok=>{
     if(!ok){ toast("Export cancelled — nothing saved"); return; }
@@ -1596,6 +1678,14 @@ $("file").onchange = function(){
         ENTRIES.push(r); have.add(r.id); added++;
       });
       if(p.config && !cfg().site) setCfg(p.config);
+      /* adopt the file's deletions for ids we do not hold (a new phone restoring from backup
+         must know what the old phone removed); never delete something present here */
+      if(Array.isArray(p.deleted)){
+        const present = new Set(ENTRIES.map(e=>e&&e.id));
+        p.deleted.forEach(id=>{ if(typeof id==="string" && id && !present.has(id)) DELETED.add(id); });
+        saveDeleted();
+      }
+      try{ const ck=lsGet(K_CHK,{})||{}; ck.restored=true; lsSet(K_CHK,ck); }catch(e){}
       persist();
       alert("Restored. "+added+" new records added ("+rows.length+" in file)."
         +(updated? "\n"+updated+" existing record"+(updated>1?"s":"")+" replaced by a newer revision from the file." : "")

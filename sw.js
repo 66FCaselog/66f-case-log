@@ -5,7 +5,10 @@
    entries live in localStorage + IndexedDB on the device and are never
    transmitted anywhere. There is no network endpoint in this application. */
 
-const CACHE = "66f-caselog-v3.6.2-audit2"; /* v3.6.2: second-pass fixes — persisted deletion tombstones
+const CACHE = "66f-caselog-v3.6.3-firstrun"; /* v3.6.3: nothing saves before Setup (gate replaces the
+   banner); first-run checklist (Setup · installed · one export · one test restore · reminder); "My month"
+   counts card on Data; exports carry deleted ids and merge_v3/build_dashboard honour them.
+   v3.6.2: second-pass fixes — persisted deletion tombstones
    (a deleted record cannot come back via a second window, a reboot, a stale mirror or an old backup);
    newest revision wins on every merge path; finishing a stub hydrates its own attributes; unsaved
    draft protected; blank "complete" refused; strict numeric form fields; import normalises every
