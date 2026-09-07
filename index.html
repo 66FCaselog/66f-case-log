@@ -215,10 +215,13 @@ details.sub[open]>summary{margin-bottom:10px}
     <p class="hint" id="acthint"></p>
   </div>
 
+  <div class="chips" id="quickind" style="justify-content:center;margin-bottom:6px"></div>
   <button class="bigbtn" id="btn-quick">⚡ QUICK LOG — 5 seconds</button>
-  <p class="hint" style="text-align:center;margin:8px 0 16px">
+  <p class="hint" style="text-align:center;margin:8px 0 8px">
     Records that the case happened. Finish the details whenever. <b>Never skip a case because you're busy.</b>
+    Tap an indication above first if you know it — one more tap, and the stub is already worth more.
   </p>
+  <button class="bigbtn ghost sm" id="btn-attest" style="margin-bottom:16px">✔ End of day — every case today is logged</button>
 
   <div id="editbar"></div>
 
@@ -266,6 +269,10 @@ details.sub[open]>summary{margin-bottom:10px}
 
     <details class="sub" open id="indication-block"><summary>Indication — why the case happened</summary>
       <div class="chips" id="indrow"></div>
+      <div id="mechwrap" style="display:none"><label style="margin-top:8px">Mechanism</label><div class="chips" id="mechrow"></div></div>
+      <label style="margin-top:10px">Blood products this case</label>
+      <div class="chips" id="hemrow"></div>
+      <div class="chips" id="hemflag"><button class="chip sm" data-hemflag="1">I directed the product decisions</button></div>
       <p class="hint">A CPT code cannot tell a trauma ex-lap from an elective one. One tap here is
       what turns “67 abdominal cases” into “41 trauma laparotomies”. No diagnosis, no identifiers.</p>
     </details>
@@ -392,6 +399,15 @@ details.sub[open]>summary{margin-bottom:10px}
 <section id="v-data" class="hide">
   <h2 style="margin:4px 0 10px">Data</h2>
   <div class="card gold" id="mymonth"></div>
+  <div class="card" id="recon">
+    <b>This month, from sources that are not this phone</b>
+    <p class="hint" style="margin:4px 0 8px">Counts only \u2014 never a record. Duty days from the roster; anesthetics billed to you
+      from the department. These turn "self-reported" into a measured capture fraction.</p>
+    <div class="row">
+      <div><label>Duty days on the roster</label><input id="r-roster" type="number" min="0" max="31" inputmode="numeric"></div>
+      <div><label>Anesthetics billed to me</label><input id="r-billed" type="number" min="0" max="400" inputmode="numeric"></div>
+    </div>
+  </div>
   <div class="card" id="health"></div>
   <details class="sub" open style="margin-top:16px"><summary>Recent records — tap to edit</summary>
   <div id="reclist"></div>
@@ -436,6 +452,17 @@ details.sub[open]>summary{margin-bottom:10px}
     </div>
     <div style="margin-top:10px"><label>Additional duties (optional, short)</label>
       <input id="s-duties" maxlength="80" placeholder="e.g. MEDLOG OIC · sim center · deployment prep"></div>
+    <div style="margin-top:10px"><label>Share of your duty time committed to clinical anesthesia</label>
+      <select id="s-fte">
+        <option value="">— not set —</option>
+        <option value="100">100% — full-time clinical</option>
+        <option value="75">75%</option>
+        <option value="50">50% — half clinical, half billet</option>
+        <option value="25">25% — mostly the billet (chief, faculty, staff officer)</option>
+        <option value="0">0% — no clinical time in this billet</option>
+      </select>
+      <p class="hint" style="margin:6px 0 0">This is what makes a billet comparison fair. A Phase-1 instructor at 25% who logs
+      few anesthetics is the <b>expected shape of that billet</b>, not a finding about the person.</p></div>
     <p class="hint">Rank and duty position are stamped on every record from now on. They let the force compare
     bedside time by billet — a Chief CRNA's admin days versus a staff CRNA's — without naming anyone.
     Update them when they change; old records keep what was true then.</p>
@@ -732,7 +759,7 @@ const PROC_ICTL = {
   RIC:"081-66F-2003", TRIAGE:"081-000-2684"
 };
 const PROC_HINTS = {
-  OR:"Optional descriptors \u2014 tap what applies. This is where readiness hides: a CPT can\u2019t show a TIVA, an awake fiberoptic, an intraop MTP, or a pediatric patient.",
+  OR:"Optional descriptors \u2014 tap what applies. This is where the exposure hides: a CPT can\u2019t show a TIVA, an awake fiberoptic, an intraop MTP, or a pediatric patient.",
   REGIONAL:"Tap every block performed, plus guidance and single-shot vs catheter.",
   POCUS:"Tap every exam. Practice scans count \u2014 note it in the description.",
   TRAUMA_BAY:"\u2605 = official 66F ICTL task. Log those in the ICTL tab too \u2014 the tallies are kept separate on purpose.",
@@ -789,6 +816,13 @@ const INDICATIONS = [
 const IND_LABEL = Object.fromEntries(INDICATIONS.map(i=>[i[0], i[1]]));
 const IND_SHORT = Object.fromEntries(INDICATIONS.map(i=>[i[0], i[2]]));
 const TRAUMA_IND = new Set(["TRAUMA_PEN","TRAUMA_BLUNT","BURN"]);
+/* Blood products — the one field the surgical community asks for first. One tap. */
+const HEMORRHAGE = [["NONE","None"],["LT4","< 4 units"],["MTP","MTP / \u2265 4 units"],["WB","Whole blood"]];
+const HEM_LABEL = Object.fromEntries(HEMORRHAGE.map(h=>[h[0],h[1]]));
+/* Blunt trauma by MECHANISM: an 85-year-old's fall from standing is "trauma \u2014 blunt" and would
+   otherwise inflate the high-energy share that a wartime-relevance argument rests on. */
+const MECHANISM = [["HIGH","High-energy (MVC, fall from height, blast, crush)"],["LOW","Low-energy (fall from standing, sport, ground level)"]];
+const MECH_LABEL = Object.fromEntries(MECHANISM.map(m=>[m[0],m[1]]));
 const ACTS = [
   ["OR","OR case","Full anesthetic. Acuity applies."],
   ["REGIONAL","Regional / APS","Blocks and acute pain. Counted, not acuity-weighted."],
@@ -1091,14 +1125,48 @@ function drawAut(){
 
 /* ══════════════════ render: PS / QC ══════════════════ */
 let PS=null, QC={};
-let IND = null;
+/* ---- capture discipline: attestation + reconciliation ----
+   "Self-reported" stops being an objection the day it becomes a NUMBER. Two cheap numbers:
+   (1) an end-of-day tap that says "every case today is logged" with the count at that moment;
+   (2) once a month, two counts from sources the logger does not control — duty days on the
+   roster, anesthetics billed to me (a count, never a record). Together: logged ÷ counted. */
+function attestToday(){
+  const c = cfg(); const d = today();
+  const cnt = ENTRIES.filter(e=>e && e.kind==="case" && e.date===d).length;
+  c.attest = c.attest || {}; c.attest[d] = cnt; setCfg(c);
+  drawAttest(); toast("Attested \u2014 "+cnt+" case"+(cnt===1?"":"s")+" today");
+}
+function drawAttest(){
+  const b=$("btn-attest"); if(!b) return;
+  const a=(cfg().attest||{})[today()];
+  b.textContent = (a===undefined) ? "\u2714 End of day \u2014 every case today is logged"
+                                  : "\u2714 Attested today ("+a+" case"+(a===1?"":"s")+") \u2014 tap to update";
+}
+let QIND = null;
+function drawQuickInd(){
+  const el=$("quickind"); if(!el) return;
+  el.innerHTML = INDICATIONS.map(o=>`<button class="chip sm${QIND===o[0]?" on":""}" data-qind="${o[0]}">${escH(o[2])}</button>`).join("");
+  el.querySelectorAll("[data-qind]").forEach(b=>b.onclick=()=>{ QIND = (QIND===b.dataset.qind)? null : b.dataset.qind; drawQuickInd(); });
+}
+let IND = null, MECH = null, HEM = null, HEMDIR = false;
 function drawInd(){
   const el = $("indrow"); if(!el) return;
   el.innerHTML = INDICATIONS.map(o=>`<button class="chip sm${IND===o[0]?" on":""}" data-ind="${o[0]}">${escH(o[1])}</button>`).join("");
   el.querySelectorAll("[data-ind]").forEach(b=>b.onclick=()=>{
     IND = (IND===b.dataset.ind) ? null : b.dataset.ind;   /* tap again to clear */
+    if(IND!=="TRAUMA_BLUNT") MECH = null;
     drawInd();
   });
+  const mw=$("mechwrap"); if(mw) mw.style.display = (IND==="TRAUMA_BLUNT") ? "" : "none";
+  const mr=$("mechrow"); if(mr){
+    mr.innerHTML = MECHANISM.map(o=>`<button class="chip sm${MECH===o[0]?" on":""}" data-mech="${o[0]}">${escH(o[1])}</button>`).join("");
+    mr.querySelectorAll("[data-mech]").forEach(b=>b.onclick=()=>{ MECH=(MECH===b.dataset.mech)?null:b.dataset.mech; drawInd(); });
+  }
+  const hr=$("hemrow"); if(hr){
+    hr.innerHTML = HEMORRHAGE.map(o=>`<button class="chip sm${HEM===o[0]?" on":""}" data-hem="${o[0]}">${escH(o[1])}</button>`).join("");
+    hr.querySelectorAll("[data-hem]").forEach(b=>b.onclick=()=>{ HEM=(HEM===b.dataset.hem)?null:b.dataset.hem; drawInd(); });
+  }
+  const hf=document.querySelector("[data-hemflag]"); if(hf){ hf.classList.toggle("on", HEMDIR); hf.onclick=()=>{ HEMDIR=!HEMDIR; drawInd(); }; }
 }
 function drawPSQC(){
   $("ps").innerHTML = PS_OPTS.map(o=>`<button class="chip sm${PS===o[0]?" on":""}" data-ps="${o[0]}">${o[1]}</button>`).join("");
@@ -1138,6 +1206,7 @@ function baseRecord(kind){
     activityType: ACT,
     siteId: c.site||"", siteName: siteLabel(), siteType: siteTypeOf(c.site||""),
     loggerId: c.logger||"", loggerRank: c.rank||"", loggerBillet: c.billet||"",
+    loggerFte: (c.fte===undefined||c.fte===null||c.fte==="")? null : +c.fte,
     sitePolicyCeiling: c.ceiling? +c.ceiling : null,
     baseUnitSource: BU_SOURCE, baseUnitYear: BU_YEAR
   };
@@ -1147,6 +1216,8 @@ function quickLog(){
   const r = baseRecord("case");
   r.date = today();   /* quick log = happening NOW; never inherit a backfill date */
   r.stub = true;
+  if(ACT==="OR" && QIND) r.indication = QIND;
+  QIND = null; drawQuickInd();
   retireZeroDay(r.date);
   ENTRIES.push(r); persist();
   toast("Logged — finish it later");
@@ -1206,6 +1277,9 @@ function fullSave(){
       const c=cfg(); r.siteId=c.site||""; r.siteName=siteLabel();
       r.siteType=siteTypeOf(c.site||""); r.siteOverride=false; } })();
   r.indication = (ACT==="OR" && IND) ? IND : null;
+  r.mechanism  = (ACT==="OR" && IND==="TRAUMA_BLUNT" && MECH) ? MECH : null;
+  r.hemorrhage = (ACT==="OR" && HEM) ? HEM : null;
+  r.directedProducts = !!(ACT==="OR" && HEMDIR && HEM && HEM!=="NONE");
   r.simulated = !!FLAGS.sim;
   r.taught = !!FLAGS.teach;
   r.soloInRoom = !!FLAGS.solo;
@@ -1272,7 +1346,7 @@ function clearForm(resetDate){
   PROCSEL.clear();
   ["f-cpt","f-base","f-cpt2","f-mins","f-desc","f-search"].forEach(i=>$(i).value="");
   if($("f-site")) $("f-site").value="";
-  PS=null; QC={}; AUT={}; FLAGS={}; IND=null;
+  PS=null; QC={}; AUT={}; FLAGS={}; IND=null; MECH=null; HEM=null; HEMDIR=false;
   drawPSQC(); drawAut(); drawInd();
   document.querySelectorAll("[data-flag]").forEach(b=>b.classList.remove("on"));
   $("searchres").innerHTML="";
@@ -1516,6 +1590,17 @@ function monthStats(ym){
   return {cases:cases.length, complete:cases.length-stubs.length, stubs:stubs.length, days, zero:zero.length, leave,
           missed:inM.filter(e=>e.kind==="missed").length, captHit, captN:capt.length, credits, sim:inM.filter(e=>e.kind==="case"&&e.simulated).length};
 }
+function reconFor(ym){ const c=cfg(); return (c.recon||{})[ym] || {}; }
+function saveRecon(){
+  const c=cfg(); const ym=today().slice(0,7); c.recon=c.recon||{}; const cur=c.recon[ym]||{};
+  const v=id=>{ const x=$(id).value.trim(); return x==="" ? null : Math.max(0, parseInt(x,10)||0); };
+  c.recon[ym] = Object.assign(cur, {roster:v("r-roster"), billed:v("r-billed")}); setCfg(c); drawMyMonth();
+}
+function drawRecon(){
+  const ym=today().slice(0,7), r=reconFor(ym);
+  if($("r-roster")) $("r-roster").value = r.roster==null? "" : r.roster;
+  if($("r-billed")) $("r-billed").value = r.billed==null? "" : r.billed;
+}
 function drawMyMonth(){
   const el=$("mymonth"); if(!el) return;
   const now=new Date(), ym=today().slice(0,7);
@@ -1524,12 +1609,19 @@ function drawMyMonth(){
   const name=now.toLocaleString(undefined,{month:"long"}), pname=prev.toLocaleString(undefined,{month:"long"});
   const line=(s)=>`${s.cases} case${s.cases===1?"":"s"}${s.stubs?` (${s.stubs} unfinished)`:""}${s.sim?` · ${s.sim} sim`:""} · ${s.days} day${s.days===1?"":"s"} logged${s.zero?` · ${s.zero} no-case`:""}${s.leave?` (${s.leave} leave)`:""}
     · ICTL ${s.captHit}/${s.captN} tasks${s.credits?` (${s.credits} credit${s.credits===1?"":"s"})`:""}${s.missed?` · ${s.missed} missed opp${s.missed===1?"":"s"}`:""}`;
+  const rc=reconFor(ym), at=cfg().attest||{};
+  const attested = Object.keys(at).filter(d=>d.slice(0,7)===ym).length;
+  const cap = [];
+  if(rc.roster) cap.push("days logged \u00f7 roster: "+m.days+"/"+rc.roster+" = "+Math.round(100*m.days/rc.roster)+"%");
+  if(rc.billed) cap.push("cases logged \u00f7 billed: "+m.cases+"/"+rc.billed+" = "+Math.round(100*m.cases/rc.billed)+"%");
+  cap.push("days attested: "+attested+" of "+m.days);
   el.innerHTML = `<b>My ${name}</b><div style="margin-top:6px;font-size:14px;line-height:1.6">${escH(line(m))}</div>`
+    + `<div class="hint" style="margin-top:6px"><b>Capture:</b> ${escH(cap.join(" \u00b7 "))}${(rc.roster||rc.billed)?"":" \u2014 enter the roster and billed counts below to get a capture fraction"}</div>`
     + (p.cases||p.days ? `<div class="hint" style="margin-top:6px">${escH(pname)}: ${escH(line(p))}</div>` : "")
     + `<p class="hint" style="margin:8px 0 0">Counts, not scores — the analysis happens quarterly, on the pooled data.</p>`;
 }
 function drawHealth(){
-  drawMyMonth();
+  drawMyMonth(); drawRecon();
   const d = daysSince(lastExport()), can=getCanary();
   const rows = [
     ["Entries in this browser", ENTRIES.length],
@@ -1603,8 +1695,8 @@ function exportJSON(){
 function exportCSV(){
   const cols = ["id","schemaVersion","kind","stub","date","savedAt","activityType","siteId","siteName",
     "loggerId","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description",
-    "asaPS","qc","acuity","indication","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
-    "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet"];
+    "asaPS","qc","acuity","indication","mechanism","hemorrhage","directedProducts","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
+    "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet","loggerFte"];
   const esc = v => v==null? "" : /[",\n]/.test(String(v))? '"'+String(v).replace(/"/g,'""')+'"' : String(v);
   const lines = [cols.join(",")].concat(ENTRIES.map(e=>cols.map(c=>{
     const v = e[c];
@@ -1672,6 +1764,10 @@ $("file").onchange = function(){
         if(r.kind==="case"){
           if(!ACT_IDS.has(r.activityType)){ r.activityType="OTHER"; r._activityCoerced=true; }
           if(r.indication!=null && !IND_LABEL[r.indication]) r.indication=null;   /* closed list */
+          if(r.mechanism!=null && !MECH_LABEL[r.mechanism]) r.mechanism=null;
+          if(r.hemorrhage!=null && !HEM_LABEL[r.hemorrhage]) r.hemorrhage=null;
+          r.directedProducts = !!r.directedProducts;
+          r.loggerFte = num(r.loggerFte,0,100,true);
           r.qc = strs(r.qc); r.procs = strs(r.procs).length ? strs(r.procs) : null;
           r.cptSecondary = strs(r.cptSecondary).length ? strs(r.cptSecondary) : null;
           r.baseUnits = num(r.baseUnits,0.5,60); r.minutes = num(r.minutes,0,1440,true);
@@ -1753,6 +1849,7 @@ function drawSetup(){
   $("s-billet").innerHTML = '<option value="">— not set —</option>' + BILLETS.map(b=>`<option value="${b[0]}">${b[1]}</option>`).join("");
   $("s-billet").value = c.billet||"";
   $("s-duties").value = c.duties||"";
+  if($("s-fte")) $("s-fte").value = (c.fte===undefined||c.fte===null||c.fte==="")? "" : String(c.fte);
   $("s-busrc-display").textContent = BU_SOURCE + " \u00b7 " + BU_YEAR;
   $("schemav").textContent = "v"+SCHEMA;
   $("origin").textContent = location.origin==="null"? "file:// (no home-screen install)" : location.origin;
@@ -1763,19 +1860,23 @@ function saveSetup(){
   const formBlank = !$("s-site").value && !$("s-logger").value && !$("s-ceiling").value;
   const cfgHasData = !!(cur.site || cur.logger || cur.ceiling);
   if(formBlank && cfgHasData) return;
-  setCfg({ site:$("s-site").value, siteOther:$("s-siteother").value.trim(),
+  /* Object.assign over `cur`: the config also carries the monthly reconciliation counts and
+     end-of-day attestations, which a Setup edit must never wipe. */
+  setCfg(Object.assign({}, cur, { site:$("s-site").value, siteOther:$("s-siteother").value.trim(),
     logger:$("s-logger").value.trim().toUpperCase(), ceiling:$("s-ceiling").value,
     rank:$("s-rank").value, billet:$("s-billet").value, duties:$("s-duties").value.trim(),
-    busrc:BU_SOURCE, buyr:BU_YEAR });
+    fte: $("s-fte") && $("s-fte").value!=="" ? +$("s-fte").value : null,
+    busrc:BU_SOURCE, buyr:BU_YEAR }));
   $("hsub").textContent = (siteLabel()||"NO SITE") + (siteTypeOf(cfg().site) ? " · "+siteTypeOf(cfg().site) : "");
   refreshAll(); toast("Saved ✓");
 }
 /* Save on BOTH input and change. `change` alone only fires on blur for text
    inputs, so typing initials or an edition year and then backgrounding the app
    silently lost the value — on precisely the fields that cannot be back-filled. */
-const SETUP_IDS = ["s-site","s-siteother","s-logger","s-ceiling","s-rank","s-billet","s-duties"];
+const SETUP_IDS = ["s-site","s-siteother","s-logger","s-ceiling","s-rank","s-billet","s-duties","s-fte"];
 ["input","change"].forEach(evt=>{
-  document.addEventListener(evt, e=>{ if(e.target && SETUP_IDS.indexOf(e.target.id)>-1) saveSetup(); });
+  document.addEventListener(evt, e=>{ if(e.target && SETUP_IDS.indexOf(e.target.id)>-1) saveSetup();
+                                      if(e.target && (e.target.id==="r-roster"||e.target.id==="r-billed")) saveRecon(); });
 });
 /* ⛔ NO pagehide/visibilitychange flush here. It read the DOM, and if the Setup
    view had never been rendered on that page load those fields are empty — so
@@ -1875,7 +1976,7 @@ function editRecord(id){
   if($("f-site")) $("f-site").value = (e.siteOverride && e.siteId)? e.siteId : "";
   $("f-desc").value=e.description||"";
   PS = e.asaPS? String(e.asaPS) : null;
-  IND = e.indication || null;
+  IND = e.indication || null; MECH = e.mechanism || null; HEM = e.hemorrhage || null; HEMDIR = !!e.directedProducts;
   QC = {}; (e.qc||[]).forEach(q=>QC[q]=true);
   AUT = Object.assign({}, e.autonomy||{});
   FLAGS = {sim:!!e.simulated, teach:!!e.taught, solo:!!e.soloInRoom};
@@ -1898,7 +1999,7 @@ function editRecord(id){
 const TOUR_KEY="crna_caselog_v3_tour_done";
 const TOUR=[
  {v:"log",  t:null,          h:"66F Case Log",
-  b:"This instrument exists because <b>no measurement of Army CRNA clinical readiness has ever been published</b> — surgery has five studies; anesthesia has none. Every entry you make is part of fixing that. This tour takes 90 seconds and you can replay it any time from the <b>?</b> button up top."},
+  b:"This instrument exists because Army anesthesia has no measure of the clinical exposure its providers actually get — what cases, how often, under what supervision. Every entry you make is part of fixing that. Every entry you make is part of fixing that. This tour takes 90 seconds and you can replay it any time from the <b>?</b> button up top."},
  {v:"setup",t:"#s-site",     h:"Setup — do this before anything else",
   b:"Site, your initials, and your site's <b>supervision policy ceiling</b> stamp every record. <b>None of them can be added later</b> — a case saved without them is permanently unattributable. The red banner on the log screen stays up until they're set."},
  {v:"setup",t:"#s-busrc",    h:"Base-unit source",
@@ -1914,7 +2015,7 @@ const TOUR=[
  {v:"log",  t:"#btn-zero",   h:"No-case days — absence is data, and WHY is the data",
   b:"A day with no qualifying cases is a <b>record</b>; a day you didn't open the app is a <b>hole</b>. One tap keeps the denominator honest."},
  {v:"log",  t:"#btn-missed", h:"Missed opportunities — the counterfactual",
-  b:"An indicated task came up, <b>you were available and credentialed</b>, and someone else did it. Four facts, no motives: were you eligible · did you ask · <b>who did it, by role</b> (a trainee has a training need; a civilian has no readiness requirement) · what reason was <b>stated</b>. Not available? Then it isn't a miss — the form says so. This counts readiness that was <b>present but not accessible</b>, and it only holds up if it stays unemotional."},
+  b:"An indicated task came up, <b>you were available and credentialed</b>, and someone else did it. Four facts, no motives: were you eligible · did you ask · <b>who did it, by role</b> (a trainee has a training need; a civilian has no readiness requirement) · what reason was <b>stated</b>. Not available? Then it isn't a miss — the form says so. This counts an indicated task you were eligible for that <b>someone else performed</b>, and it only holds up if it stays unemotional."},
  {v:"ictl", t:"#ictlchips",  h:"ICTL — logs on its own, no case needed",
   b:"A central line on the ward counts. The ten official 66F tasks are tracked with <b>two denominators</b>: seven capturable here, three TO&E tasks that need field equipment no civilian OR has — a zero on those is a <b>structural fact, never a miss</b>."},
  {v:"data", t:"#btn-export", h:"Export weekly — this is the whole safety net",
@@ -2046,7 +2147,8 @@ $("btn-help").onclick=tourStart;
   drawInstall();
 
   $("f-date").value = today();
-  drawInd();
+  drawInd(); drawQuickInd(); drawAttest();
+  $("btn-attest").onclick = attestToday;
   $("f-date").addEventListener("input", syncDateNote);
   $("f-date").addEventListener("change", syncDateNote);
   syncDateNote();

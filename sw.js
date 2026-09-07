@@ -5,7 +5,11 @@
    entries live in localStorage + IndexedDB on the device and are never
    transmitted anywhere. There is no network endpoint in this application. */
 
-const CACHE = "66f-caselog-v3.6.4-indication"; /* v3.6.4: INDICATION — one tap on OR cases for why
+const CACHE = "66f-caselog-v3.6.5-capture"; /* v3.6.5: capture discipline + billet framing — FTE in
+   Setup (stamped loggerFte); end-of-day attestation; monthly roster-days / billed-cases counts -> capture
+   fraction on My month; indication chips on Quick Log; blood products (none/<4u/MTP/whole blood +
+   "I directed"); blunt-trauma mechanism (high/low energy); "readiness" never names a number.
+   v3.6.4: INDICATION — one tap on OR cases for why
    the case happened (trauma pen/blunt, burn, infection, vascular, oncologic, obstetric, non-trauma,
    other). An anesthesia CPT is anatomic: 00790 is a trauma ex-lap AND an elective colectomy. Closed
    list, no ICD-10, no diagnosis, no identifiers. Carried into CSV, workbook and dashboard.
