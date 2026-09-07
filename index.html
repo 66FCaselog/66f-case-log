@@ -277,13 +277,13 @@ details.sub[open]>summary{margin-bottom:10px}
       what turns “67 abdominal cases” into “41 trauma laparotomies”. No diagnosis, no identifiers.</p>
     </details>
 
-    <details class="sub" open id="acuity-block"><summary>Acuity</summary>
+    <details class="sub" open id="acuity-block"><summary>Case weight (acuity)</summary>
       <div>
       <label>ASA physical status</label>
       <div class="chips" id="ps"></div>
       <label style="margin-top:12px">Qualifying circumstances</label>
       <div class="chips" id="qc"></div>
-      <p class="hint">Acuity applies to OR cases only. Other activity is counted, never weighted.</p>
+      <p class="hint">Applies to OR cases only; other activity is counted, never weighted. This is a <b>billing-derived case weight</b> (CMS base units + ASA + qualifying circumstances) — consistent across the force, not a measure of how hard the case was.</p>
       </div>
     </details>
 
@@ -291,9 +291,12 @@ details.sub[open]>summary{margin-bottom:10px}
     <p class="hint" style="margin:0 0 10px">
       <b>0</b> attending directs/performs · <b>1</b> attending present, I execute ·
       <b>2</b> attending available, I decide · <b>3</b> I am alone.
-      <b>When in doubt, score down.</b> “No crisis occurred” is <b>NA</b>, never 0.
+      <b>Score the level that held for most of the phase</b> — not the worst moment, not the best. “No crisis occurred” is <b>NA</b>, never 0.
     </p>
     <div id="autrows"></div>
+    <label style="margin-top:8px">If an attending was present or directing — why?</label>
+    <div class="chips" id="attendrow"></div>
+    <p class="hint" style="margin:6px 0 0">This separates <b>policy</b> from <b>need</b>: a level 1 because the site requires it is a different fact from a level 1 because the case needed two sets of hands.</p>
     <p class="hint">Backfilling from the chart? <b>Leave autonomy blank rather than guess</b> —
     a blank is honest data; a guessed score poisons the mean.</p>
     </details>
@@ -389,6 +392,11 @@ details.sub[open]>summary{margin-bottom:10px}
       <div><label>Live or sim? (tap to switch)</label>
         <div class="chips"><button class="chip sm" id="i-sim">Simulated: NO</button></div></div>
     </div>
+    <div class="row" style="margin-top:10px">
+      <div><label>My role</label><div class="chips" id="i-role"></div></div>
+      <div><label>Outcome</label><div class="chips" id="i-success"></div></div>
+    </div>
+    <p class="hint" style="margin:6px 0 0">Only <b>performed by me</b> enters the tally headline. Assisted and observed are recorded and shown beside it, never summed into it.</p>
     <button class="bigbtn sm" id="btn-ictl" style="margin-top:12px">LOG TASK</button>
   </div>
   <details class="sub" open style="margin-top:16px"><summary>Capture to date</summary>
@@ -1113,6 +1121,7 @@ function drawAut(){
       ${isCrisis?`<button class="na" data-n="NA">NA</button>`:""}
     </div></div>`;
   }).join("");
+  drawAttend();
   $("autrows").querySelectorAll(".aut").forEach(row=>{
     row.querySelectorAll("button").forEach(b=>b.onclick=()=>{
       const ph = phases[+row.dataset.ph];
@@ -1148,10 +1157,31 @@ function drawQuickInd(){
   el.innerHTML = INDICATIONS.map(o=>`<button class="chip sm${QIND===o[0]?" on":""}" data-qind="${o[0]}">${escH(o[2])}</button>`).join("");
   el.querySelectorAll("[data-qind]").forEach(b=>b.onclick=()=>{ QIND = (QIND===b.dataset.qind)? null : b.dataset.qind; drawQuickInd(); });
 }
+const ATTEND_REASONS = [["POLICY","Site policy required it"],["CASE","This case needed it"],["ASKED","I asked for them"],["TRAINEE","A trainee was in the room"],["NONE","Not present"]];
+const ATTEND_LABEL = Object.fromEntries(ATTEND_REASONS.map(a=>[a[0],a[1]]));
+let ATTEND = null;
+function drawAttend(){
+  const el=$("attendrow"); if(!el) return;
+  el.innerHTML = ATTEND_REASONS.map(o=>`<button class="chip sm${ATTEND===o[0]?" on":""}" data-att="${o[0]}">${escH(o[1])}</button>`).join("");
+  el.querySelectorAll("[data-att]").forEach(b=>b.onclick=()=>{ ATTEND=(ATTEND===b.dataset.att)?null:b.dataset.att; drawAttend(); });
+}
+/* Codebook: every closed-list value has a one-line rule (CODEBOOK.md carries the paragraph).
+   The version is stamped on every record so a later change to a definition is visible in the data. */
 let IND = null, MECH = null, HEM = null, HEMDIR = false;
+const CODEBOOK_V = "2026-09-07";
+const IND_RULE = {
+  TRAUMA_PEN:"Wound from a penetrating object or projectile is the reason for surgery (GSW, stab, shrapnel).",
+  TRAUMA_BLUNT:"Injury from blunt force is the reason for surgery (MVC, fall, crush, assault). Add the mechanism.",
+  BURN:"Thermal, chemical or electrical burn is the reason for surgery (excision, graft, escharotomy).",
+  INFECTION:"Infection or sepsis source control is the reason (washout, debridement, nec fasc, abscess).",
+  VASCULAR:"Ischaemia, aneurysm, occlusion or vascular access is the reason (not a trauma vessel injury).",
+  ONC:"A tumour is the reason (resection, staging, reconstruction for cancer).",
+  OB:"Pregnancy is the reason (cesarean, obstetric haemorrhage, cerclage). Not gynaecology.",
+  ELECTIVE:"Scheduled or medical non-trauma surgery (joint replacement, hernia, degenerative spine, medical ex-lap).",
+  OTHER_IND:"None of the above fits. Say what it was in the description." };
 function drawInd(){
   const el = $("indrow"); if(!el) return;
-  el.innerHTML = INDICATIONS.map(o=>`<button class="chip sm${IND===o[0]?" on":""}" data-ind="${o[0]}">${escH(o[1])}</button>`).join("");
+  el.innerHTML = INDICATIONS.map(o=>`<button class="chip sm${IND===o[0]?" on":""}" data-ind="${o[0]}" title="${escH(IND_RULE[o[0]]||"")}">${escH(o[1])}</button>`).join("");
   el.querySelectorAll("[data-ind]").forEach(b=>b.onclick=()=>{
     IND = (IND===b.dataset.ind) ? null : b.dataset.ind;   /* tap again to clear */
     if(IND!=="TRAUMA_BLUNT") MECH = null;
@@ -1200,7 +1230,7 @@ $("f-search").oninput = function(){
 function baseRecord(kind){
   const c = cfg();
   return {
-    id: uid(), schemaVersion: SCHEMA, kind,
+    id: uid(), schemaVersion: SCHEMA, kind, codebook: CODEBOOK_V,
     savedAt: new Date().toISOString(),
     date: $("f-date").value || today(),
     activityType: ACT,
@@ -1276,6 +1306,7 @@ function fullSave(){
          the historical restore above would pin the old override forever. */
       const c=cfg(); r.siteId=c.site||""; r.siteName=siteLabel();
       r.siteType=siteTypeOf(c.site||""); r.siteOverride=false; } })();
+  r.attendReason = ATTEND || null;
   r.indication = (ACT==="OR" && IND) ? IND : null;
   r.mechanism  = (ACT==="OR" && IND==="TRAUMA_BLUNT" && MECH) ? MECH : null;
   r.hemorrhage = (ACT==="OR" && HEM) ? HEM : null;
@@ -1305,7 +1336,7 @@ function fullSave(){
       codes.forEach(c=>{
         const i = ICTL.findIndex(x=>x.code===c); if(i<0) return;
         const t = baseRecord("ictl"); t.stub=false;
-        t.task = ICTL[i].name; t.taskIndex = i; t.count = 1;
+        t.task = ICTL[i].name; t.taskIndex = i; t.count = 1; t.role = "PERFORMED"; t.success = true;
         t.simulated = !!r.simulated;          /* a sim case yields SIM ICTL credit */
         t.date = r.date;                      /* the case's date, not today */
         t.siteId=r.siteId; t.siteName=r.siteName; t.siteType=r.siteType;
@@ -1346,7 +1377,7 @@ function clearForm(resetDate){
   PROCSEL.clear();
   ["f-cpt","f-base","f-cpt2","f-mins","f-desc","f-search"].forEach(i=>$(i).value="");
   if($("f-site")) $("f-site").value="";
-  PS=null; QC={}; AUT={}; FLAGS={}; IND=null; MECH=null; HEM=null; HEMDIR=false;
+  PS=null; QC={}; AUT={}; FLAGS={}; IND=null; MECH=null; HEM=null; HEMDIR=false; ATTEND=null;
   drawPSQC(); drawAut(); drawInd();
   document.querySelectorAll("[data-flag]").forEach(b=>b.classList.remove("on"));
   $("searchres").innerHTML="";
@@ -1442,6 +1473,15 @@ function drawICTL(){
   drawTally();
 }
 function ictlName(i){ return ICTL[i].name; }
+const ICTL_ROLES = [["PERFORMED","Performed by me"],["ASSISTED","Assisted"],["OBSERVED","Observed"]];
+let ICTL_ROLE = "PERFORMED", ICTL_OK = true;
+function drawIctlRole(){
+  const r=$("i-role"), o=$("i-success"); if(!r||!o) return;
+  r.innerHTML = ICTL_ROLES.map(x=>`<button class="chip sm${ICTL_ROLE===x[0]?" on":""}" data-irole="${x[0]}">${escH(x[1])}</button>`).join("");
+  r.querySelectorAll("[data-irole]").forEach(b=>b.onclick=()=>{ ICTL_ROLE=b.dataset.irole; drawIctlRole(); });
+  o.innerHTML = `<button class="chip sm${ICTL_OK?" on":""}" data-iok="1">Successful</button><button class="chip sm${!ICTL_OK?" on":""}" data-iok="0">Not successful / abandoned</button>`;
+  o.querySelectorAll("[data-iok]").forEach(b=>b.onclick=()=>{ ICTL_OK=b.dataset.iok==="1"; drawIctlRole(); });
+}
 function logICTL(){
   if(!gateSetup()) return;
   if(ICTL_SEL===null){ toast("Pick a task first"); return; }
@@ -1457,15 +1497,16 @@ function logICTL(){
   r.taskIndex = ICTL_SEL;
   r.count = Math.min(50, Math.max(1, parseInt($("i-count").value,10)||1));   /* -4 used to save as -4 */
   r.simulated = ICTL_SIM;
+  r.role = ICTL_ROLE; r.success = ICTL_OK;
   ENTRIES.push(r); persist();
-  ICTL_SEL=null; ICTL_SIM=false; $("i-count").value=1; drawICTL();
+  ICTL_SEL=null; ICTL_SIM=false; ICTL_ROLE="PERFORMED"; ICTL_OK=true; $("i-count").value=1; drawICTL(); drawIctlRole();
   toast("Task logged ✓");
 }
 function drawTally(){
   const live = ENTRIES.filter(e=>e.kind==="ictl" && !e.simulated);
   const sim  = ENTRIES.filter(e=>e.kind==="ictl" && e.simulated);
   const capt = ICTL.filter(t=>t.capturable), got = capt.filter((t,i)=>
-    live.some(e=>e.taskIndex===ICTL.indexOf(t))).length;
+    live.some(e=>e.taskIndex===ICTL.indexOf(t) && (!e.role || e.role==="PERFORMED"))).length;
   $("ictltally").innerHTML =
     `<div class="banner ok" style="margin-bottom:12px">Capturable here: <b>${got} / ${capt.length}</b>
       &nbsp;·&nbsp; TO&amp;E-dependent: <b>0 / ${ICTL.length-capt.length}</b>
@@ -1474,25 +1515,33 @@ function drawTally(){
       in a civilian OR — a zero there is a <b>structural finding, not a miss</b>.</div></div>` +
     ICTL.map((t,i)=>{
       const cnt = e => { const c=Number(e.count); return (Number.isInteger(c) && c>0 && c<=50) ? c : 1; };
-      const n = live.filter(e=>e.taskIndex===i).reduce((s,e)=>s+cnt(e),0);
+      const perf = e => !e.role || e.role==="PERFORMED";
+      const n = live.filter(e=>e.taskIndex===i && perf(e)).reduce((s,e)=>s+cnt(e),0);
+      const oth = live.filter(e=>e.taskIndex===i && !perf(e)).reduce((s,e)=>s+cnt(e),0);
       const s = sim.filter(e=>e.taskIndex===i).reduce((s2,e)=>s2+cnt(e),0);
       return `<div class="kv"><span>${t.name}${t.capturable?"":' <span class="pill sim">not capturable here</span>'}</span>
-        <b>${n}${s?` <span style="color:var(--warn);font-size:12px">+${s} sim</span>`:""}</b></div>`;
+        <b>${n}${oth?` <span style="color:var(--muted);font-size:12px">+${oth} assisted/observed</span>`:""}${s?` <span style="color:var(--warn);font-size:12px">+${s} sim</span>`:""}</b></div>`;
     }).join("");
 }
 
 /* ══════════════════ unfinished ══════════════════ */
 function drawTodo(){
-  const stubs = ENTRIES.filter(e=>e.stub);
+  const stubs = ENTRIES.filter(e=>e.stub && !e.unrecoverable);
   $("todobadge").textContent = stubs.length;
   $("todobadge").classList.toggle("hide", stubs.length===0);
   $("todolist").innerHTML = stubs.length
     ? stubs.slice().reverse().map(e=>`<div class="item">
         <div class="g"><b>${escH(e.activityType)} · ${escH(e.date)}</b><small>logged ${new Date(e.savedAt).toLocaleTimeString()}</small></div>
         <button class="chip sm" data-fin="${escH(e.id)}" style="background:linear-gradient(180deg,var(--gold),var(--gold-deep));color:#1A1206;border-color:var(--gold);font-weight:800">Finish</button>
+        <button class="chip sm" data-unrec="${escH(e.id)}" title="The case happened but the detail is gone — keep it counted, stop asking">Can't recover</button>
         <button class="chip sm" data-del="${escH(e.id)}">✕</button>
       </div>`).join("")
     : `<p class="hint" style="text-align:center;padding:20px 0">Nothing waiting. ✓</p>`;
+  $("todolist").querySelectorAll("[data-unrec]").forEach(b=>b.onclick=()=>{
+    if(!confirm("Mark this stub as unrecoverable?\n\nIt STAYS a case (the denominator keeps it) but leaves this list and is reported as detail-unrecoverable.")) return;
+    const e=ENTRIES.find(x=>x.id===b.dataset.unrec); if(!e) return;
+    e.unrecoverable = true; e.unrecoverableAt = new Date().toISOString(); persist(); toast("Kept as a case — detail marked unrecoverable");
+  });
   $("todolist").querySelectorAll("[data-fin]").forEach(b=>b.onclick=()=>finishStub(b.dataset.fin));
   $("todolist").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{
     if(!confirm("Delete this stub? The case will no longer be counted.")) return;
@@ -1695,8 +1744,8 @@ function exportJSON(){
 function exportCSV(){
   const cols = ["id","schemaVersion","kind","stub","date","savedAt","activityType","siteId","siteName",
     "loggerId","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description",
-    "asaPS","qc","acuity","indication","mechanism","hemorrhage","directedProducts","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
-    "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet","loggerFte"];
+    "asaPS","qc","acuity","indication","mechanism","hemorrhage","directedProducts","attendReason","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
+    "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet","loggerFte","role","success","unrecoverable","codebook"];
   const esc = v => v==null? "" : /[",\n]/.test(String(v))? '"'+String(v).replace(/"/g,'""')+'"' : String(v);
   const lines = [cols.join(",")].concat(ENTRIES.map(e=>cols.map(c=>{
     const v = e[c];
@@ -1768,6 +1817,8 @@ $("file").onchange = function(){
           if(r.hemorrhage!=null && !HEM_LABEL[r.hemorrhage]) r.hemorrhage=null;
           r.directedProducts = !!r.directedProducts;
           r.loggerFte = num(r.loggerFte,0,100,true);
+          if(r.attendReason!=null && !ATTEND_LABEL[r.attendReason]) r.attendReason=null;
+          r.unrecoverable = !!r.unrecoverable;
           r.qc = strs(r.qc); r.procs = strs(r.procs).length ? strs(r.procs) : null;
           r.cptSecondary = strs(r.cptSecondary).length ? strs(r.cptSecondary) : null;
           r.baseUnits = num(r.baseUnits,0.5,60); r.minutes = num(r.minutes,0,1440,true);
@@ -1775,7 +1826,10 @@ $("file").onchange = function(){
           r.autonomy = (r.autonomy && typeof r.autonomy==="object" && !Array.isArray(r.autonomy)) ? r.autonomy : {};
           r.acuity = acuity(r);          /* derived: recomputed, never trusted from the file */
         }
-        if(r.kind==="ictl"){ r.count = num(r.count,1,50,true) || 1; }
+        if(r.kind==="ictl"){ r.count = num(r.count,1,50,true) || 1;
+          if(!["PERFORMED","ASSISTED","OBSERVED"].includes(r.role)) r.role = "PERFORMED";
+          r.success = (r.success===false) ? false : true; }
+        if(typeof r.codebook!=="string") r.codebook = null;
         return r;
       };
       const bad = rows.filter(r=>!valid(r));
@@ -1940,8 +1994,8 @@ function drawRecList(){
   const label=e=>{
     if(e.kind==="zero")   return "🌑 Day: "+(DAY_TYPES[e.dayType||"CLIN"]||e.dayType);
     if(e.kind==="missed") return "⚠ Missed: "+(e.missedTask||"")+" · "+(MISS_REASONS[e.missedReason]||e.missedReason||"")+(e.missedWho?" · did it: "+(MISS_WHO[e.missedWho]||e.missedWho):"")+(e.missedAsked==="ASKED"?" · asked, declined":"");
-    if(e.kind==="ictl")   return "✓ ICTL: "+(e.task||"")+(e.simulated?" (SIM)":"");
-    return (e.stub?"◷ Stub · ":"")+(e.activityType||"?")+(e.cpt?" · "+e.cpt:"")+(e.indication?" · "+(IND_SHORT[e.indication]||e.indication):"")+(e.description?" · "+e.description:"")+(e.simulated?" (SIM)":"");
+    if(e.kind==="ictl")   return "✓ ICTL: "+(e.task||"")+(e.role&&e.role!=="PERFORMED"?" · "+e.role.toLowerCase():"")+(e.success===false?" · not successful":"")+(e.simulated?" (SIM)":"");
+    return (e.stub?(e.unrecoverable?"◷ Stub (unrecoverable) · ":"◷ Stub · "):"")+(e.activityType||"?")+(e.cpt?" · "+e.cpt:"")+(e.indication?" · "+(IND_SHORT[e.indication]||e.indication):"")+(e.description?" · "+e.description:"")+(e.simulated?" (SIM)":"");
   };
   el.innerHTML=rows.map(e=>`<div class="item">
     <div class="g"><b>${escH(label(e))}</b><small>${escH(e.date||"")}${e.editedAt?" · edited":""}${e.wasStub&&!e.stub?" · was stub":""}</small></div>
@@ -1976,7 +2030,7 @@ function editRecord(id){
   if($("f-site")) $("f-site").value = (e.siteOverride && e.siteId)? e.siteId : "";
   $("f-desc").value=e.description||"";
   PS = e.asaPS? String(e.asaPS) : null;
-  IND = e.indication || null; MECH = e.mechanism || null; HEM = e.hemorrhage || null; HEMDIR = !!e.directedProducts;
+  IND = e.indication || null; MECH = e.mechanism || null; HEM = e.hemorrhage || null; HEMDIR = !!e.directedProducts; ATTEND = e.attendReason || null;
   QC = {}; (e.qc||[]).forEach(q=>QC[q]=true);
   AUT = Object.assign({}, e.autonomy||{});
   FLAGS = {sim:!!e.simulated, teach:!!e.taught, solo:!!e.soloInRoom};
@@ -1999,7 +2053,7 @@ function editRecord(id){
 const TOUR_KEY="crna_caselog_v3_tour_done";
 const TOUR=[
  {v:"log",  t:null,          h:"66F Case Log",
-  b:"This instrument exists because Army anesthesia has no measure of the clinical exposure its providers actually get — what cases, how often, under what supervision. Every entry you make is part of fixing that. Every entry you make is part of fixing that. This tour takes 90 seconds and you can replay it any time from the <b>?</b> button up top."},
+  b:"This instrument exists because Army anesthesia has no measure of the clinical exposure its providers actually get — what cases, how often, under what supervision. The U.S. Army CRNA Readiness Model (D\u2019Angelo et al., AANA J 2023) says that activity \u201cwill need to be measured\u201d. This is that measurement, and every entry you make is part of it. This tour takes 90 seconds and you can replay it any time from the <b>?</b> button up top."},
  {v:"setup",t:"#s-site",     h:"Setup — do this before anything else",
   b:"Site, your initials, and your site's <b>supervision policy ceiling</b> stamp every record. <b>None of them can be added later</b> — a case saved without them is permanently unattributable. The red banner on the log screen stays up until they're set."},
  {v:"setup",t:"#s-busrc",    h:"Base-unit source",
@@ -2011,10 +2065,10 @@ const TOUR=[
  {v:"log",  t:"#full",       h:"The full record — anesthesia's own currency",
   b:"CPT by plain-English search, then acuity = <b>base units + ASA physical status + qualifying circumstances</b>. That's the anesthesia measure of case weight — not a borrowed surgical RVU. An ASA I knee scope and an ASA IV ruptured aneurysm stop looking identical."},
  {v:"log",  t:"#autrows",    h:"Autonomy — the variable nobody else captures",
-  b:"Scored 0–3 <b>per phase of care</b>: 0 attending directs · 1 present, you execute · 2 available, you decide · 3 alone. <b>When in doubt, score down.</b> \"No crisis occurred\" is <b>NA, never 0</b>. This is the whole question for a 66F — the deployed role requires 3."},
+  b:"Scored 0–3 <b>per phase of care</b>: 0 attending directs · 1 present, you execute · 2 available, you decide · 3 alone. <b>Score the level that held for most of the phase.</b> \"No crisis occurred\" is <b>NA, never 0</b>. This is the whole question for a 66F — at an FRSD the 66F is the only anesthesia provider — level 3 is the deployed condition."},
  {v:"log",  t:"#btn-zero",   h:"No-case days — absence is data, and WHY is the data",
   b:"A day with no qualifying cases is a <b>record</b>; a day you didn't open the app is a <b>hole</b>. One tap keeps the denominator honest."},
- {v:"log",  t:"#btn-missed", h:"Missed opportunities — the counterfactual",
+ {v:"log",  t:"#btn-missed", h:"Missed opportunities — the nearest thing to a counterfactual",
   b:"An indicated task came up, <b>you were available and credentialed</b>, and someone else did it. Four facts, no motives: were you eligible · did you ask · <b>who did it, by role</b> (a trainee has a training need; a civilian has no readiness requirement) · what reason was <b>stated</b>. Not available? Then it isn't a miss — the form says so. This counts an indicated task you were eligible for that <b>someone else performed</b>, and it only holds up if it stays unemotional."},
  {v:"ictl", t:"#ictlchips",  h:"ICTL — logs on its own, no case needed",
   b:"A central line on the ward counts. The ten official 66F tasks are tracked with <b>two denominators</b>: seven capturable here, three TO&E tasks that need field equipment no civilian OR has — a zero on those is a <b>structural fact, never a miss</b>."},
@@ -2147,7 +2201,7 @@ $("btn-help").onclick=tourStart;
   drawInstall();
 
   $("f-date").value = today();
-  drawInd(); drawQuickInd(); drawAttest();
+  drawInd(); drawQuickInd(); drawAttest(); drawIctlRole();
   $("btn-attest").onclick = attestToday;
   $("f-date").addEventListener("input", syncDateNote);
   $("f-date").addEventListener("change", syncDateNote);

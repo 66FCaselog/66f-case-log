@@ -5,7 +5,10 @@
    entries live in localStorage + IndexedDB on the device and are never
    transmitted anywhere. There is no network endpoint in this application. */
 
-const CACHE = "66f-caselog-v3.6.5-capture"; /* v3.6.5: capture discipline + billet framing — FTE in
+const CACHE = "66f-caselog-v3.6.6-codebook"; /* v3.6.6: versioned CODEBOOK stamped on every record; autonomy
+   duration rule + "why was the attending present"; ICTL performed/assisted/observed + success (only performed
+   counts); stubs can be closed as unrecoverable (still a case); "case weight (acuity)" wording; model cited.
+   v3.6.5: capture discipline + billet framing — FTE in
    Setup (stamped loggerFte); end-of-day attestation; monthly roster-days / billed-cases counts -> capture
    fraction on My month; indication chips on Quick Log; blood products (none/<4u/MTP/whole blood +
    "I directed"); blunt-trauma mechanism (high/low energy); "readiness" never names a number.
