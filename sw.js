@@ -5,7 +5,7 @@
    entries live in localStorage + IndexedDB on the device and are never
    transmitted anywhere. There is no network endpoint in this application. */
 
-const CACHE = "66f-caselog-v3.6.9-crisisdef"; /* v3.6.7: non-OR detail — trauma-bay ROLE ladder (primary / airway /
+const CACHE = "66f-caselog-v3.6.10-opstage"; /* v3.6.7: non-OR detail — trauma-bay ROLE ladder (primary / airway /
    secondary / observer / primary survey), ICU "rounded / presented" + preliminary patient-acuity descriptors
    (shock type, ARDS, TBI, ECMO, burn, prolonged hold); the workbook now prints every descriptor.
    v3.6.6: versioned CODEBOOK stamped on every record; autonomy

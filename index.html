@@ -253,7 +253,7 @@ details.sub[open]>summary{margin-bottom:10px}
 <div class="faqsect">Logging</div>
 <details><summary>Quick Log or the full record?</summary><div class="ans"><b>Quick Log, every time.</b> It takes about five seconds and <b>the case is counted the moment you tap it</b>. Add the detail later from the Unfinished tab, which badges itself with how many are waiting. A stub you never finish still counts the case; a case you never logged is gone.</div></details>
 <details><summary>I forgot to log yesterday. Can I still enter it?</summary><div class="ans">Yes. Open <b>Full record now</b> and set the Date field. The date <b>sticks</b> for a run of entries, so you can do a whole day in one sitting. Quick Log always stamps today on purpose, so it can never inherit a backdate by accident.</div></details>
-<details><summary>Do I have to fill in autonomy? What if I am not sure?</summary><div class="ans"><b>Leave it blank.</b> A blank is honest data. A guess moves the average and there is no way to tell afterwards which numbers were real. This is especially true if you are entering an old case from memory — <b>blank beats guessed, every time.</b></div></details><details><summary>What counts as a crisis?</summary><div class="ans"><b>Crisis</b> = an unplanned event in this phase that needed immediate intervention to prevent death or major harm — arrest, massive hemorrhage, cannot-intubate/cannot-oxygenate, anaphylaxis, malignant hyperthermia, LAST, a reperfusion potassium event. <b>Not a crisis:</b> a difficult airway fixed on the next attempt, a pressor bolus for transient hypotension, bronchospasm or laryngospasm that answered first-line treatment. If none of that happened, tap <b>NA</b> on the Crisis row — never 0. A 0 says an attending directed you through a real crisis, which is a real observation about a real event. The codebook version stamped on each record shows which definition it was scored under.</div></details>
+<details><summary>Do I have to fill in autonomy? What if I am not sure?</summary><div class="ans"><b>Leave it blank.</b> A blank is honest data. A guess moves the average and there is no way to tell afterwards which numbers were real. This is especially true if you are entering an old case from memory — <b>blank beats guessed, every time.</b></div></details><details><summary>What counts as a crisis?</summary><div class="ans"><b>Crisis</b> = an unplanned event in this phase that needed immediate intervention to prevent death or major harm — arrest, massive hemorrhage, cannot-intubate/cannot-oxygenate, anaphylaxis, malignant hyperthermia, LAST, a reperfusion potassium event. <b>Not a crisis:</b> a difficult airway fixed on the next attempt, a pressor bolus for transient hypotension, bronchospasm or laryngospasm that answered first-line treatment. If none of that happened, tap <b>NA</b> on the Crisis row — never 0. A 0 says an attending directed you through a real crisis, which is a real observation about a real event. The codebook version stamped on each record shows which definition it was scored under.</div></details><details><summary>Index operation, or a return to the OR?</summary><div class="ans">Shown only when the indication is trauma or burn. <b>Index</b> = the first operation for this injury. <b>Planned staged return</b> = a return that was intended at the end of the last operation — second look, pack removal, definitive repair after damage control, staged burn grafting. <b>Unplanned return</b> = bleeding, missed injury, compartment syndrome, leak. <b>Planned versus unplanned is decided by what the previous operation’s plan said, not by how urgent this one felt.</b> A staged return is not lesser trauma — it is damage-control doctrine — but it is a different exposure, and the workbook reports the two apart. Not sure? Leave it blank.</div></details>
 <details><summary>What counts as a no-case day?</summary><div class="ans">Five different things, and the app keeps them apart on purpose:<ul><li><b>Clinical — no qualifying cases</b> and <b>Float / relief</b> — you were at the bedside and available, and nothing came. <b>These are the ones that matter.</b></li><li><b>Admin</b> and <b>Training / FTX / TDY</b> — duty days away from the bedside. Recorded, but counted separately.</li><li><b>Leave / pass</b> — excluded from every denominator, so logging it costs you nothing.</li></ul>A day with no cases is a <b>record</b>. A day you never opened the app is a <b>hole</b>.</div></details>
 <details><summary>What is a missed opportunity? Am I reporting on someone?</summary><div class="ans"><span class='no'>No.</span> It records a case you were eligible for that went elsewhere, and what the reason was — scheduling, turnover, trainee priority, privileges not in place. <b>It captures facts, not motives</b>, and there is no field for blame. It exists because a case that walks past you is invisible to every other dataset in the Army.</div></details>
 <details><summary>I am covering at a different hospital today.</summary><div class="ans">Open the full record and use <b>Site for THIS case only</b>, inside “Backfilling a case from a different site?”. Your configured site stays the default for everything else.</div></details>
@@ -337,6 +337,7 @@ details.sub[open]>summary{margin-bottom:10px}
     <details class="sub" open id="indication-block"><summary>Indication — why the case happened</summary>
       <div class="chips" id="indrow"></div>
       <div id="mechwrap" style="display:none"><label style="margin-top:8px">Mechanism</label><div class="chips" id="mechrow"></div></div>
+      <div id="stagewrap" style="display:none"><label style="margin-top:8px">Operation stage</label><div class="chips" id="stagerow"></div></div>
       <label style="margin-top:10px">Blood products this case</label>
       <div class="chips" id="hemrow"></div>
       <div class="chips" id="hemflag"><button class="chip sm" data-hemflag="1">I directed the product decisions</button></div>
@@ -900,6 +901,15 @@ const HEM_LABEL = Object.fromEntries(HEMORRHAGE.map(h=>[h[0],h[1]]));
    otherwise inflate the high-energy share that a wartime-relevance argument rests on. */
 const MECHANISM = [["HIGH","High-energy (MVC, fall from height, blast, crush)"],["LOW","Low-energy (fall from standing, sport, ground level)"]];
 const MECH_LABEL = Object.fromEntries(MECHANISM.map(m=>[m[0],m[1]]));
+/* Operation STAGE, trauma and burn only: a damage-control laparotomy and its day-3 washout share a
+   CPT and an indication. Both are trauma exposure — the staged return IS damage-control doctrine —
+   but they are different exposures, and "% trauma" should be able to say which. */
+const OP_STAGE = [["INDEX","Index operation"],["PLANNED_RETURN","Planned staged return"],["UNPLANNED_RETURN","Unplanned return to OR"]];
+const STAGE_LABEL = Object.fromEntries(OP_STAGE.map(s=>[s[0],s[1]]));
+const STAGE_RULE = {
+  INDEX:"The first operation for this injury or burn at any facility — the damage-control or definitive procedure that opens the episode.",
+  PLANNED_RETURN:"A return to the OR that was INTENDED at the end of the previous operation: second look, pack removal, definitive repair after damage control, staged burn excision or grafting, planned washout.",
+  UNPLANNED_RETURN:"A return that was NOT planned at the previous operation: bleeding, missed injury, abdominal compartment syndrome, leak, wound complication. Decided by what the prior plan said, not by how urgent this one felt." };
 const ACTS = [
   ["OR","OR case","Full anesthetic. Acuity applies."],
   ["REGIONAL","Regional / APS","Blocks and acute pain. Counted, not acuity-weighted."],
@@ -1236,12 +1246,12 @@ function drawAttend(){
 }
 /* Codebook: every closed-list value has a one-line rule (CODEBOOK.md carries the paragraph).
    The version is stamped on every record so a later change to a definition is visible in the data. */
-let IND = null, MECH = null, HEM = null, HEMDIR = false;
-const CODEBOOK_V = "2026-09-09";
+let IND = null, MECH = null, STAGE = null, HEM = null, HEMDIR = false;
+const CODEBOOK_V = "2026-09-09b";
 const IND_RULE = {
-  TRAUMA_PEN:"Wound from a penetrating object or projectile is the reason for surgery (GSW, stab, shrapnel).",
-  TRAUMA_BLUNT:"Injury from blunt force is the reason for surgery (MVC, fall, crush, assault). Add the mechanism.",
-  BURN:"Thermal, chemical or electrical burn is the reason for surgery (excision, graft, escharotomy).",
+  TRAUMA_PEN:"Wound from a penetrating object or projectile is the reason for surgery (GSW, stab, shrapnel). Add the operation stage.",
+  TRAUMA_BLUNT:"Injury from blunt force is the reason for surgery (MVC, fall, crush, assault). Add the mechanism and the operation stage.",
+  BURN:"Thermal, chemical or electrical burn is the reason for surgery (excision, graft, escharotomy). Add the operation stage.",
   INFECTION:"Infection or sepsis source control is the reason (washout, debridement, nec fasc, abscess).",
   VASCULAR:"Ischaemia, aneurysm, occlusion or vascular access is the reason (not a trauma vessel injury).",
   ONC:"A tumour is the reason (resection, staging, reconstruction for cancer).",
@@ -1254,12 +1264,18 @@ function drawInd(){
   el.querySelectorAll("[data-ind]").forEach(b=>b.onclick=()=>{
     IND = (IND===b.dataset.ind) ? null : b.dataset.ind;   /* tap again to clear */
     if(IND!=="TRAUMA_BLUNT") MECH = null;
+    if(!TRAUMA_IND.has(IND)) STAGE = null;
     drawInd();
   });
   const mw=$("mechwrap"); if(mw) mw.style.display = (IND==="TRAUMA_BLUNT") ? "" : "none";
   const mr=$("mechrow"); if(mr){
     mr.innerHTML = MECHANISM.map(o=>`<button class="chip sm${MECH===o[0]?" on":""}" data-mech="${o[0]}">${escH(o[1])}</button>`).join("");
     mr.querySelectorAll("[data-mech]").forEach(b=>b.onclick=()=>{ MECH=(MECH===b.dataset.mech)?null:b.dataset.mech; drawInd(); });
+  }
+  const sw=$("stagewrap"); if(sw) sw.style.display = TRAUMA_IND.has(IND) ? "" : "none";
+  const sr=$("stagerow"); if(sr){
+    sr.innerHTML = OP_STAGE.map(o=>`<button class="chip sm${STAGE===o[0]?" on":""}" data-stage="${o[0]}" title="${escH(STAGE_RULE[o[0]]||"")}">${escH(o[1])}</button>`).join("");
+    sr.querySelectorAll("[data-stage]").forEach(b=>b.onclick=()=>{ STAGE=(STAGE===b.dataset.stage)?null:b.dataset.stage; drawInd(); });
   }
   const hr=$("hemrow"); if(hr){
     hr.innerHTML = HEMORRHAGE.map(o=>`<button class="chip sm${HEM===o[0]?" on":""}" data-hem="${o[0]}">${escH(o[1])}</button>`).join("");
@@ -1378,6 +1394,7 @@ function fullSave(){
   r.attendReason = ATTEND || null;
   r.indication = (ACT==="OR" && IND) ? IND : null;
   r.mechanism  = (ACT==="OR" && IND==="TRAUMA_BLUNT" && MECH) ? MECH : null;
+  r.opStage    = (ACT==="OR" && TRAUMA_IND.has(IND) && STAGE) ? STAGE : null;
   r.hemorrhage = (ACT==="OR" && HEM) ? HEM : null;
   r.directedProducts = !!(ACT==="OR" && HEMDIR && HEM && HEM!=="NONE");
   r.simulated = !!FLAGS.sim;
@@ -1446,7 +1463,7 @@ function clearForm(resetDate){
   PROCSEL.clear();
   ["f-cpt","f-base","f-cpt2","f-mins","f-desc","f-search"].forEach(i=>$(i).value="");
   if($("f-site")) $("f-site").value="";
-  PS=null; QC={}; AUT={}; FLAGS={}; IND=null; MECH=null; HEM=null; HEMDIR=false; ATTEND=null;
+  PS=null; QC={}; AUT={}; FLAGS={}; IND=null; MECH=null; STAGE=null; HEM=null; HEMDIR=false; ATTEND=null;
   drawPSQC(); drawAut(); drawInd();
   document.querySelectorAll("[data-flag]").forEach(b=>b.classList.remove("on"));
   $("searchres").innerHTML="";
@@ -1813,7 +1830,7 @@ function exportJSON(){
 function exportCSV(){
   const cols = ["id","schemaVersion","kind","stub","date","savedAt","activityType","siteId","siteName",
     "loggerId","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description",
-    "asaPS","qc","acuity","indication","mechanism","hemorrhage","directedProducts","attendReason","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
+    "asaPS","qc","acuity","indication","mechanism","opStage","hemorrhage","directedProducts","attendReason","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
     "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet","loggerFte","role","success","unrecoverable","codebook"];
   const esc = v => v==null? "" : /[",\n]/.test(String(v))? '"'+String(v).replace(/"/g,'""')+'"' : String(v);
   const lines = [cols.join(",")].concat(ENTRIES.map(e=>cols.map(c=>{
@@ -1883,6 +1900,7 @@ $("file").onchange = function(){
           if(!ACT_IDS.has(r.activityType)){ r.activityType="OTHER"; r._activityCoerced=true; }
           if(r.indication!=null && !IND_LABEL[r.indication]) r.indication=null;   /* closed list */
           if(r.mechanism!=null && !MECH_LABEL[r.mechanism]) r.mechanism=null;
+          if(r.opStage!=null && !STAGE_LABEL[r.opStage]) r.opStage=null;
           if(r.hemorrhage!=null && !HEM_LABEL[r.hemorrhage]) r.hemorrhage=null;
           r.directedProducts = !!r.directedProducts;
           r.loggerFte = num(r.loggerFte,0,100,true);
@@ -2099,7 +2117,7 @@ function editRecord(id){
   if($("f-site")) $("f-site").value = (e.siteOverride && e.siteId)? e.siteId : "";
   $("f-desc").value=e.description||"";
   PS = e.asaPS? String(e.asaPS) : null;
-  IND = e.indication || null; MECH = e.mechanism || null; HEM = e.hemorrhage || null; HEMDIR = !!e.directedProducts; ATTEND = e.attendReason || null;
+  IND = e.indication || null; MECH = e.mechanism || null; STAGE = e.opStage || null; HEM = e.hemorrhage || null; HEMDIR = !!e.directedProducts; ATTEND = e.attendReason || null;
   QC = {}; (e.qc||[]).forEach(q=>QC[q]=true);
   AUT = Object.assign({}, e.autonomy||{});
   FLAGS = {sim:!!e.simulated, teach:!!e.taught, solo:!!e.soloInRoom};
