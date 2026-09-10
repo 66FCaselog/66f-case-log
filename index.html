@@ -487,6 +487,9 @@ details.sub[open]>summary{margin-bottom:10px}
   <div class="card" id="health"></div>
   <details class="sub" open style="margin-top:16px"><summary>Recent records — tap to edit</summary>
   <div id="reclist"></div>
+  <p class="hint">Newest first by <b>when you entered it</b>. The date shown is the date the case
+  <b>happened</b> — where those differ you logged it later, and the row says
+  <span style="color:var(--warn)">entered &lt;date&gt;</span>. No note means you logged it the same day.</p>
   <p class="hint">Editing keeps the record's identity and original capture time, and stamps
   <b>editedAt</b> — corrections are auditable, never silent. Deleting is permanent.</p></details>
   <div class="sect">Backup</div>
@@ -2084,8 +2087,14 @@ function drawRecList(){
     if(e.kind==="ictl")   return "✓ ICTL: "+(e.task||"")+(e.role&&e.role!=="PERFORMED"?" · "+e.role.toLowerCase():"")+(e.success===false?" · not successful":"")+(e.simulated?" (SIM)":"");
     return (e.stub?(e.unrecoverable?"◷ Stub (unrecoverable) · ":"◷ Stub · "):"")+(e.activityType||"?")+(e.cpt?" · "+e.cpt:"")+(e.indication?" · "+(IND_SHORT[e.indication]||e.indication):"")+(e.description?" · "+e.description:"")+(e.simulated?" (SIM)":"");
   };
+  /* The list is ordered by when things were ENTERED but shows the date the case HAPPENED, which
+     is why a backfill sitting at the top next to a same-day entry reads as a mystery. Show the
+     entry date whenever it differs — that difference is the whole signal, and printing "entered"
+     on every same-day row would just be noise on a phone. */
+  const enteredOn = e => (e.savedAt||"").slice(0,10);
+  const isBackfill = e => { const en=enteredOn(e); return !!(en && e.date && en !== e.date); };
   el.innerHTML=rows.map(e=>`<div class="item">
-    <div class="g"><b>${escH(label(e))}</b><small>${escH(e.date||"")}${e.editedAt?" · edited":""}${e.wasStub&&!e.stub?" · was stub":""}</small></div>
+    <div class="g"><b>${escH(label(e))}</b><small>${escH(e.date||"")}${isBackfill(e)?` · <span style="color:var(--warn)">entered ${escH(enteredOn(e))}</span>`:""}${e.editedAt?" · edited":""}${e.wasStub&&!e.stub?" · was stub":""}</small></div>
     ${e.kind==="case"?`<button class="chip sm" data-editrec="${escH(e.id)}">${e.stub?"Finish":"Edit"}</button>`:""}
     <button class="chip sm" data-delrec="${escH(e.id)}">✕</button>
   </div>`).join("") + (all.length>REC_SHOW ? `<button class="chip sm wide" id="rec-more" style="margin-top:8px">Show ${Math.min(50, all.length-REC_SHOW)} more (${all.length-REC_SHOW} older)</button>` : "");
