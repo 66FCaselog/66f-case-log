@@ -1125,7 +1125,7 @@ const DELETED = new Set();
    bring a deleted record back. Bounded; ids are ~15 chars. */
 const K_DEL = "crna_caselog_v3_deleted";
 function loadDeleted(){ try{ (lsGet(K_DEL,[])||[]).forEach(id=>DELETED.add(id)); }catch(e){} }
-function saveDeleted(){ const a=Array.from(DELETED).slice(-2000); lsSet(K_DEL,a); idbPut("deleted",a); }
+function saveDeleted(){ const a=Array.from(DELETED); lsSet(K_DEL,a); idbPut("deleted",a); }
 /* true only while a deliberate removal is in flight; lets the canary drop once */
 let DROP_OK = false, DROPPED = 0;
 /* keep the records matching pred, remember the rest as deliberately gone */
@@ -1138,7 +1138,77 @@ function forget(pred){
   return gone;
 }
 /* newest revision of a record: an edit stamps editedAt, a stub completion completedAt */
-const stampOf = e => (e && (e.editedAt || e.completedAt || e.savedAt)) || "";
+/* Shared browser import checks. Synthetic dataset provenance is separate from exercise modality. */
+const ExportContract = (()=>{
+  const owner = top => {
+    const cfg=top.config||{};
+    if(typeof cfg!=="object"||Array.isArray(cfg)) throw Error("config must be an object");
+    const a=top.logger||"", b=cfg.logger||"";
+    if(typeof a!=="string"||typeof b!=="string"||(a&&b&&a!==b)) throw Error("conflicting header logger IDs");
+    return a||b;
+  };
+  const time = v => {
+    if(v==null||v==="") return -Infinity;
+    if(typeof v!=="string"||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})?$/.test(v)) throw Error("invalid revision timestamp");
+    const n=Date.parse(/(?:Z|[+-]\d{2}:\d{2})$/.test(v)?v:v+"Z");
+    if(!Number.isFinite(n)) throw Error("invalid revision timestamp");
+    const date=v.slice(0,10), clock=v.slice(11,19).split(":").map(Number);
+    if(new Date(date).toISOString().slice(0,10)!==date || clock[0]>23 || clock[1]>59 || clock[2]>59) throw Error("invalid revision timestamp");
+    const fraction=(v.match(/\.(\d+)/)||[])[1]||"";
+    return n*1000+Number(fraction.padEnd(6,"0").slice(3,6));
+  };
+  const canonical = r => JSON.stringify(r, function(k,v){
+    if(k.startsWith("_")) return undefined;
+    if(v&&typeof v==="object"&&!Array.isArray(v)) return Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]]));
+    return v;
+  });
+  const compare = (a,b) => {
+    const x=time(a.editedAt||a.completedAt||a.savedAt), y=time(b.editedAt||b.completedAt||b.savedAt);
+    if(x!==y) return x>y?1:-1;
+    const ac=canonical(a),bc=canonical(b); return ac===bc?0:ac>bc?1:-1;
+  };
+  const simulation = top => {
+    const h=owner(top), explicit=top.simulatedDataset!=null&&top.simulatedDataset!==false;
+    const hdr=h.startsWith("SIM-")||String(top.site||"").includes("(SIM)");
+    const flags=new Set(top.entries.map(r=>hdr||String(r.id||"").startsWith("SIM-")||String(r.loggerId||"").startsWith("SIM-")||String(r.siteName||"").includes("(SIM)")));
+    if(!explicit&&flags.size>1) throw Error("mixed synthetic and live dataset records");
+    return explicit||hdr||flags.has(true);
+  };
+  const validate = top => {
+    if(!top||!Array.isArray(top.entries)) throw Error("entries must be an array");
+    const who=owner(top), ver=top.schemaVersion;
+    if(ver!=null&&(!Number.isInteger(ver)||ver<1||ver>3)) throw Error("unsupported schema version");
+    if(top.deleted!=null&&(!Array.isArray(top.deleted)||top.deleted.some(x=>typeof x!=="string"||!x.trim()))) throw Error("invalid deleted IDs");
+    top.entries.forEach(r=>{
+      if(!r||typeof r.id!=="string"||!r.id.trim()) throw Error("invalid record ID");
+      const rw=r.loggerId||who;
+      if(typeof rw!=="string"||(who&&rw&&who!==rw)) throw Error("record/header ownership mismatch");
+      ["savedAt","completedAt","editedAt"].forEach(k=>time(r[k]));
+      if(r.date!=null&&(!/^\d{4}-\d{2}-\d{2}$/.test(r.date)||!Number.isFinite(Date.parse(r.date))||new Date(r.date).toISOString().slice(0,10)!==r.date)) throw Error("invalid case date");
+    });
+    simulation(top); return top;
+  };
+  const preflight = tops => {
+    const owners=new Map(),deleted=[],flags=new Set();
+    tops.forEach(top=>{
+      validate(top); const who=owner(top); flags.add(simulation(top));
+      top.entries.forEach(r=>{ const rw=r.loggerId||who; if(owners.has(r.id)&&owners.get(r.id)!==rw) throw Error("record ID collision across providers"); owners.set(r.id,rw); });
+      if(top.deleted?.length&&!who) throw Error("deletions need a single export owner");
+      (top.deleted||[]).forEach(id=>deleted.push([id,who]));
+    });
+    if(flags.size>1) throw Error("mixed synthetic and live exports");
+    deleted.forEach(([id,who])=>{if(owners.has(id)&&owners.get(id)!==who) throw Error("deletion belongs to another provider");});
+  };
+  const csv = v => {
+    if(v==null) return "";
+    let s=typeof v==="object"?JSON.stringify(v):String(v);
+    if(typeof v==="string"&&/^[\s]*[=+@-]/.test(s)) s="'"+s;
+    return '"'+s.replace(/"/g,'""')+'"';
+  };
+  return {owner,time,compare,validate,preflight,simulation,csv};
+})();
+
+const stampOf = e => ExportContract.time(e && (e.editedAt || e.completedAt || e.savedAt));
 /* Merge another copy of the log into ENTRIES. Adds records we lack, takes the OTHER
    copy's version of a record when its revision is newer (unless we are editing that
    very record right now), and never revives a tombstoned id. Returns what changed. */
@@ -1150,7 +1220,7 @@ function mergeIn(other){
     if(!o || !o.id || DELETED.has(o.id)) return;
     const i = idx.get(o.id);
     if(i===undefined){ ENTRIES.push(o); idx.set(o.id, ENTRIES.length-1); res.added++; }
-    else if(o.id!==EDIT_ID && stampOf(o) > stampOf(ENTRIES[i])){ ENTRIES[i]=o; res.updated++; }
+    else if(o.id!==EDIT_ID && ExportContract.compare(o, ENTRIES[i]) > 0){ ENTRIES[i]=o; res.updated++; }
   });
   return res;
 }
@@ -1749,7 +1819,7 @@ function drawTodo(){
   $("todolist").querySelectorAll("[data-unrec]").forEach(b=>b.onclick=()=>{
     if(!confirm("Mark this stub as unrecoverable?\n\nIt STAYS a case (the denominator keeps it) but leaves this list and is reported as detail-unrecoverable.")) return;
     const e=ENTRIES.find(x=>x.id===b.dataset.unrec); if(!e) return;
-    e.unrecoverable = true; e.unrecoverableAt = new Date().toISOString(); persist(); toast("Kept as a case — detail marked unrecoverable");
+    e.unrecoverable = true; e.unrecoverableAt = new Date().toISOString(); e.editedAt=e.unrecoverableAt; persist(); toast("Kept as a case — detail marked unrecoverable");
   });
   $("todolist").querySelectorAll("[data-fin]").forEach(b=>b.onclick=()=>finishStub(b.dataset.fin));
   $("todolist").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{
@@ -1951,11 +2021,11 @@ function exportJSON(){
   });
 }
 function exportCSV(){
-  const cols = ["id","schemaVersion","kind","stub","date","savedAt","activityType","siteId","siteName",
+  const cols = ["id","schemaVersion","kind","stub","date","savedAt","completedAt","editedAt","restoredFromId","activityType","siteId","siteName",
     "loggerId","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description",
     "asaPS","qc","acuity","indication","mechanism","opStage","hemorrhage","directedProducts","attendReason","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
     "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet","loggerFte","role","success","unrecoverable","codebook"];
-  const esc = v => v==null? "" : /[",\n]/.test(String(v))? '"'+String(v).replace(/"/g,'""')+'"' : String(v);
+  const esc = ExportContract.csv;
   const lines = [cols.join(",")].concat(ENTRIES.map(e=>cols.map(c=>{
     const v = e[c];
     return esc(v && typeof v==="object" ? JSON.stringify(v) : v);
@@ -2044,6 +2114,13 @@ $("file").onchange = function(){
       };
       const bad = rows.filter(r=>!valid(r));
       if(bad.length && !confirm(bad.length+" of "+rows.length+" rows are not valid case-log records and will be SKIPPED.\n\nContinue?")) return;
+      const importedTop = Array.isArray(p) ? {entries:rows.filter(valid)} : {...p, entries:rows.filter(valid)};
+      try {
+        ExportContract.preflight([...(ENTRIES.length?[{entries:ENTRIES}]:[]), importedTop]);
+      } catch(error) { alert("REFUSED: "+error.message); return; }
+      if(ExportContract.simulation(importedTop)) {
+        alert("REFUSED: synthetic demonstration datasets belong in the demonstration dashboard, not a personal log."); return;
+      }
       const mine = (cfg().logger||"").trim().toUpperCase();
       const good = rows.filter(valid);
       const foreign = mine ? good.filter(r=>(r.loggerId||"").trim().toUpperCase()!==mine) : [];
@@ -2053,25 +2130,28 @@ $("file").onchange = function(){
           +"This phone should hold only YOUR records. Merging others here inflates your tally and can resurrect records they deleted.\n\n"
           +"Pooling exports is done on the computer with merge_v3.py, not here.\n\nImport them anyway?")) return;
       }
+      const clean = good.map(r=>norm(JSON.parse(JSON.stringify(r))));
       const have = new Set(ENTRIES.map(e=>e.id));
       let added=0, dupes=0, updated=0, tomb=0;
       const tombed = good.filter(r=>DELETED.has(r.id));
       let revive = false;
       if(tombed.length){
         revive = confirm(tombed.length+" record"+(tombed.length>1?"s":"")+" in this file "+(tombed.length>1?"were":"was")
-          +" DELETED on this phone earlier.\n\nBring "+(tombed.length>1?"them":"it")+" back?\n\n(Cancel = keep them deleted)");
-        if(revive) tombed.forEach(r=>DELETED.delete(r.id));
-        if(revive) saveDeleted();
+          +" DELETED on this phone earlier.\n\nRestore "+(tombed.length>1?"them":"it")+" as new records? The original deletion history will be retained.\n\n(Cancel = keep them deleted)");
+        if(revive) clean.forEach(r=>{
+          if(DELETED.has(r.id)) {
+            r.restoredFromId=r.id; r.id=uid(); r.editedAt=new Date().toISOString();
+          }
+        });
       }
-      good.forEach(r=>{
+      clean.forEach(r=>{
         /* `have` MUST grow as we go: without this, two rows carrying the same id
            both entered the log from a single file */
         if(DELETED.has(r.id)){ tomb++; return; }
-        norm(r);
         if(have.has(r.id)){
           /* same id already here: take the file's copy only if it is a NEWER revision */
           const i = ENTRIES.findIndex(e=>e.id===r.id);
-          if(i>=0 && stampOf(r) > stampOf(ENTRIES[i])){ ENTRIES[i]=r; updated++; } else dupes++;
+          if(i>=0 && ExportContract.compare(r, ENTRIES[i]) > 0){ ENTRIES[i]=r; updated++; } else dupes++;
           return;
         }
         ENTRIES.push(r); have.add(r.id); added++;
@@ -2091,7 +2171,7 @@ $("file").onchange = function(){
         +(dupes? "\n"+dupes+" row"+(dupes>1?"s":"")+" already here (same or older) — unchanged." : "")
         +(tomb? "\n"+tomb+" row"+(tomb>1?"s":"")+" left deleted." : "")
         +(bad.length? "\n"+bad.length+" row"+(bad.length>1?"s":"")+" skipped as invalid." : ""));
-    }catch(e){ alert("Could not read that file."); }
+    }catch(e){ alert("Could not import that file. No changes were accepted."); }
   };
   rd.readAsText(f); this.value="";
 };
@@ -2184,12 +2264,10 @@ function syncBadge(){
      otherwise the unfinished-stub count. The badge persists on the home-screen icon after the app closes. */
   const n = exportOverdue() ? ENTRIES.length : ENTRIES.filter(e=>e.stub).length;
   try{
-    if(navigator.setAppBadge){ n>0 ? navigator.setAppBadge(n) : (navigator.clearAppBadge&&navigator.clearAppBadge()); }
+    if(navigator.setAppBadge){ Promise.resolve(n>0 ? navigator.setAppBadge(n) : (navigator.clearAppBadge&&navigator.clearAppBadge())).catch(()=>{}); }
   }catch(e){}
-  try{
-    if(navigator.serviceWorker && navigator.serviceWorker.controller)
-      navigator.serviceWorker.controller.postMessage({type:"badge",count:n});
-  }catch(e){}
+  /* v3.6.13: the worker badge message was removed — page + worker both calling setAppBadge
+     crashed the Chromium renderer on restore (reproduced 2026-09-14 in tests/distribution_safety_test.py). */
 }
 function refreshAll(){ drawAlerts(); drawTodo(); drawEditBar(); }
 
@@ -2449,7 +2527,8 @@ document.addEventListener("keydown", e=>{ if(e.key==="Escape" && $("faq").classL
   })();
   drawActs(); drawAut(); drawPSQC(); drawICTL(); refreshAll();
   /* first launch: run the guided tour once; replay any time via the ? button */
-  try{ if(!localStorage.getItem(TOUR_KEY)) setTimeout(tourStart, 700); }catch(e){}
+  try{ if(!localStorage.getItem(TOUR_KEY)) setTimeout(()=>{ if(!localStorage.getItem(TOUR_KEY)) tourStart(); }, 700); }catch(e){}
+  window.CASELOG_READY = true;
 })();
 </script>
 </body>

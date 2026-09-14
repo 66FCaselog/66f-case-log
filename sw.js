@@ -5,7 +5,7 @@
    entries live in localStorage + IndexedDB on the device and are never
    transmitted anywhere. There is no network endpoint in this application. */
 
-const CACHE = "66f-caselog-v3.6.12-cpt276-tzfix"; /* v3.6.7: non-OR detail — trauma-bay ROLE ladder (primary / airway /
+const CACHE = "66f-caselog-v3.6.13-contracts"; /* v3.6.7: non-OR detail — trauma-bay ROLE ladder (primary / airway /
    secondary / observer / primary survey), ICU "rounded / presented" + preliminary patient-acuity descriptors
    (shock type, ARDS, TBI, ECMO, burn, prolonged hold); the workbook now prints every descriptor.
    v3.6.6: versioned CODEBOOK stamped on every record; autonomy
@@ -91,12 +91,4 @@ self.addEventListener("fetch", e => {
   );
 });
 
-/* The page asks the worker to refresh the icon badge when the
-   unfinished count changes (some platforms only honour it from here). */
-self.addEventListener("message", e => {
-  const d = e.data || {};
-  if (d.type === "badge" && self.navigator && self.navigator.setAppBadge) {
-    if (d.count > 0) self.navigator.setAppBadge(d.count).catch(() => {});
-    else if (self.navigator.clearAppBadge) self.navigator.clearAppBadge().catch(() => {});
-  }
-});
+/* Icon badging is handled by the page (Badging API). The worker owns only the offline shell. */
