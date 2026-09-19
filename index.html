@@ -522,7 +522,7 @@ details.sub[open]>summary{margin-bottom:10px}
     <div style="margin-top:10px"><label>If other, type it</label><input id="s-siteother"></div>
     <div class="row" style="margin-top:10px">
       <div><label>Your initials</label><input id="s-logger" maxlength="12" placeholder="JC3"></div>
-      <div><label>Policy ceiling</label>
+      <div><label>Policy ceiling <span class="hint" style="font-weight:400">— for this site</span></label>
         <select id="s-ceiling">
           <option value="">— not set —</option>
           <option value="1">1 — attending required at induction</option>
@@ -530,7 +530,22 @@ details.sub[open]>summary{margin-bottom:10px}
           <option value="3">3 — no presence requirement</option>
         </select></div>
     </div>
+    <p class="hint">Initials: pick them once and never change them — letters and digits only, no dots or
+    spaces. Three initials plus two digits you will remember (<b>JC319</b>) keeps you distinct in a cohort
+    of forty. Rank and duty position are separate fields, so a promotion changes nothing here.</p>
+    <p class="hint">The ceiling is the <b>written</b> supervision requirement at this site. It is remembered
+    per site — change site and the ceiling follows it.</p>
     <p class="hint">⛔ None of these can be back-filled. A case saved without them is permanently unattributable.</p>
+  </div>
+  <div class="card">
+    <label>Your User ID</label>
+    <p style="margin:6px 0 2px"><b id="s-userid" style="font-size:22px;letter-spacing:.14em;font-family:ui-monospace,Menlo,Consolas,monospace">——————</b></p>
+    <p class="hint">Drawn by this app on this phone, unique to you, and stamped on every record. It is what
+    keeps two people with the same initials apart. It cannot be changed, and it travels inside your backup —
+    so restore a backup onto a new phone and you stay the same logger.</p>
+    <button class="chip" type="button" id="btn-register">✉ Register with the collector</button>
+    <p class="hint">One tap, once. It opens an email with your initials, User ID, site and rank so the
+    collector knows the app is in your hands. No case data is sent.</p>
   </div>
   <div class="card">
     <div class="row">
@@ -562,6 +577,8 @@ details.sub[open]>summary{margin-bottom:10px}
     on every record automatically. Nothing to pick.</p>
   </div>
   <div class="card">
+    <div class="kv"><span>App version</span><b id="appv"></b></div>
+    <div class="kv"><span>User ID</span><b id="d-userid"></b></div>
     <div class="kv"><span>Schema version</span><b id="schemav"></b></div>
     <div class="kv"><span>Storage origin</span><b id="origin"></b></div>
     <div class="kv"><span>Persistent storage</span><b id="persisted">—</b></div>
@@ -980,6 +997,7 @@ const ICTL = ICTL_OFFICIAL.map(t=>({code:t[0], name:ICTL_TITLE[t[0]]||t[1], capt
 
 /* ══════════════════ constants ══════════════════ */
 const SCHEMA = 3;
+const APP_VERSION = "v3.6.15";
 const K_MAIN = "crna_caselog_v3";
 /* Base-unit provenance is a property of the BUILD, not a user choice — the CPT
    table is embedded, so every user carries identical weights. Asking users to
@@ -989,6 +1007,7 @@ const BU_SOURCE = "CMS Anesthesia Base Units";
 const BU_YEAR   = "CY2022 file (unchanged through 2026)";
 const K_CFG  = "crna_caselog_v3_cfg";
 const K_EXP  = "crna_caselog_v3_lastexport";
+const K_UID  = "crna_caselog_v3_userid";
 const K_DEMO = "crna_caselog_v3_demo";   /* v3.6.14: invented records are present on this device */
 const CANARY = "clv3_canary";
 /* WHY the case happened. An anesthesia CPT is ANATOMIC, not indication-based: 00790 is a
@@ -1277,6 +1296,40 @@ function getCanary(){
 }
 
 /* ══════════════════ config ══════════════════ */
+/* USER ID — v3.6.15. There is no server, so nobody can be ISSUED a number. The app draws
+   its own on first launch instead: 6 chars from a 32-symbol alphabet with the letters that
+   get misread by eye or by phone keyboard (I/O/0/1) removed = 2^30 combinations. In a
+   cohort of 200 the chance any two collide is about 1 in 36,000.
+   ⛔ Generated ONCE and never again. It keys the pseudonym registry, so regenerating it
+   would split one provider into two in every build that follows. It survives a Setup edit,
+   a restore, and a wipe of the log; only deleting the app's storage loses it — the same
+   act that loses the log. A restored backup ADOPTS the key inside it, because that file is
+   the same person arriving on a new phone. */
+const UID_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+function newUserId(){
+  const a = new Uint32Array(6);
+  (self.crypto||window.crypto).getRandomValues(a);
+  return Array.from(a, n => UID_ALPHABET[n % UID_ALPHABET.length]).join("");
+}
+function userId(){
+  let v = lsGet(K_UID, null);
+  if(typeof v==="string" && /^[2-9A-HJ-NP-Z]{6}$/.test(v)) return v;
+  /* an older install that has a key only inside cfg (restore before first launch) */
+  const c = lsGet(K_CFG,{}) || {};
+  if(typeof c.userId==="string" && /^[2-9A-HJ-NP-Z]{6}$/.test(c.userId)){ lsSet(K_UID,c.userId); return c.userId; }
+  v = newUserId(); lsSet(K_UID, v);
+  try{ setCfg(Object.assign({}, c, {userId:v})); }catch(e){}
+  return v;
+}
+/* Adopt a key that arrived inside a restored backup. Only ever called when this phone has
+   no records of its own — otherwise the two logs are two people and merging identities
+   would silently credit one provider's cases to the other. */
+function adoptUserId(v){
+  if(typeof v!=="string" || !/^[2-9A-HJ-NP-Z]{6}$/.test(v)) return false;
+  if(v===userId()) return false;
+  lsSet(K_UID, v); setCfg(Object.assign({}, cfg(), {userId:v}));
+  return true;
+}
 function cfg(){ return lsGet(K_CFG,{}) || {}; }
 function setCfg(o){ lsSet(K_CFG,o); idbPut("cfg",o); }
 /* Any id ending in OTHER is a free-text slot, in every group. */
@@ -1292,6 +1345,57 @@ function gateSetup(){
   toast("Set "+m.join(", ")+" in Setup first — nothing saved");
   show("setup");
   return false;
+}
+/* CEILING PER SITE — v3.6.15. The ceiling is a property of the SITE, not of the logger, and
+   the merge refuses to pool autonomy across sites that report different ones. Before this,
+   Setup held a single ceiling: switching site for an off-duty day and switching back left
+   the old site stamped with the other site's ceiling, and an edit cannot repair it. Now the
+   app remembers one ceiling per site and swaps it with the site. */
+function ceilings(){ const c=cfg(); return (c.ceilings && typeof c.ceilings==="object" && !Array.isArray(c.ceilings)) ? c.ceilings : {}; }
+function ceilingFor(siteId){ const v=ceilings()[siteId]; return (v==="1"||v==="2"||v==="3") ? v : ""; }
+function rememberCeiling(siteId, value){
+  if(!siteId || !(value==="1"||value==="2"||value==="3")) return;
+  const c=cfg(), map=Object.assign({}, ceilings()); map[siteId]=value;
+  setCfg(Object.assign({}, c, {ceilings:map}));
+}
+/* ONE-TIME UPGRADE TO v3.6.15 — runs once, guarded by a flag in the config.
+   (a) back-stamps this phone's User ID onto records saved before keys existed, and only onto
+       records whose initials match this phone: a foreign record that was merged in earlier is
+       left alone rather than being claimed;
+   (b) seeds the per-site ceiling map from the RECORDS, not from the Setup form. The records
+       are the evidence of what each site's ceiling actually was; a single Setup field is the
+       thing that was wrong when a site was switched and not switched back. Where a site's
+       records disagree, the most common value wins and the disagreement is left visible in
+       the data for merge_v3.py to report. ⛔ No historical record's ceiling is ever rewritten. */
+function migrateTo3615(){
+  const c = cfg();
+  if(c.mig3615) return;
+  const key = userId(), mine = (c.logger||"").trim().toUpperCase();
+  let stamped = 0;
+  ENTRIES.forEach(r=>{
+    if(!r || r.loggerKey) return;
+    if(mine && (r.loggerId||"").trim().toUpperCase()!==mine) return;
+    r.loggerKey = key; stamped++;
+  });
+  const tally = {};
+  ENTRIES.forEach(r=>{
+    const site=r&&r.siteId, cl=r&&r.sitePolicyCeiling;
+    if(!site || !(cl===1||cl===2||cl===3)) return;
+    tally[site] = tally[site] || {};
+    tally[site][cl] = (tally[site][cl]||0) + 1;
+  });
+  const map = Object.assign({}, ceilings());
+  Object.keys(tally).forEach(site=>{
+    if(map[site]) return;
+    const best = Object.keys(tally[site]).sort((a,b)=>tally[site][b]-tally[site][a])[0];
+    if(best) map[site] = String(best);
+  });
+  const next = Object.assign({}, c, {ceilings:map, mig3615:true, userId:key});
+  /* Setup's single ceiling now follows the current site, so an upgrade lands on the value this
+     site's own records attest to — not whatever was left in the form after a site switch. */
+  if(c.site && map[c.site]) next.ceiling = map[c.site];
+  setCfg(next);
+  if(stamped) persist();
 }
 function cfgMissing(){
   const c=cfg(), m=[];
@@ -1522,7 +1626,7 @@ function baseRecord(kind){
     date: $("f-date").value || today(),
     activityType: ACT,
     siteId: c.site||"", siteName: siteLabel(), siteType: siteTypeOf(c.site||""),
-    loggerId: c.logger||"", loggerRank: c.rank||"", loggerBillet: c.billet||"",
+    loggerId: c.logger||"", loggerKey: userId(), loggerRank: c.rank||"", loggerBillet: c.billet||"",
     loggerFte: (c.fte===undefined||c.fte===null||c.fte==="")? null : +c.fte,
     sitePolicyCeiling: c.ceiling? +c.ceiling : null,
     baseUnitSource: BU_SOURCE, baseUnitYear: BU_YEAR
@@ -1839,6 +1943,22 @@ function drawTodo(){
 
 /* ══════════════════ health / alerts ══════════════════ */
 function lastExport(){ return lsGet(K_EXP,null); }
+/* The collection cadence is MONTHLY and the app cannot see an email leaving the phone, so the
+   export itself is the proxy: exporting is the act the logger performs in order to send. */
+const K_SEND = "crna_caselog_v3_lastsend";
+function lastSend(){ return lsGet(K_SEND,null) || lsGet(K_EXP,null); }
+function monthName(ms){ try{ return new Date(ms).toLocaleDateString(undefined,{month:"long"}); }catch(e){ return "then"; } }
+function sendOverdue(){
+  if(!ENTRIES.length) return false;
+  const t = lastSend();
+  if(t==null) return daysSince(oldestEntryMs()) > 30;
+  const d = new Date(t), n = new Date();
+  return (n.getFullYear()*12+n.getMonth()) > (d.getFullYear()*12+d.getMonth());
+}
+function oldestEntryMs(){
+  const ds = ENTRIES.map(e=>Date.parse((e&&e.date||"")+"T12:00:00")).filter(Number.isFinite);
+  return ds.length? Math.min.apply(null,ds) : null;
+}
 /* Export overdue = there is something worth losing AND no export for 7+ days.
    Shared by the banner and the home-screen badge so they can never disagree. */
 function exportOverdue(){
@@ -1862,7 +1982,8 @@ function checklist(){
     {k:"install",  done:standalone || !!ck.installSkipped, label: isIOS ? "Installed to the Home Screen (required on iPhone)" : "Installed to the home screen", skip: !isIOS && !standalone ? "Using it on a computer" : null},
     {k:"export",   done:lastExport()!=null,               label:"One JSON export, saved somewhere that is not this phone", go:"data"},
     {k:"restored", done:!!ck.restored,                    label:"One test restore from that export (proves the backup works)", go:"data"},
-    {k:"reminder", done:!!ck.reminder,                    label:"Weekly export reminder on the calendar", go:"data", self:"Added it"}
+    {k:"reminder", done:!!ck.reminder,                    label:"Weekly export reminder on the calendar", go:"data", self:"Added it"},
+    {k:"register", done:!!ck.registered,                  label:"Registered your User ID with the collector", go:"setup"}
   ];
 }
 function drawChecklist(){
@@ -1897,6 +2018,14 @@ function drawAlerts(){
   if(stubs) h = `<div class="banner warn">◷ <b>${stubs} unfinished ${stubs===1?"case":"cases"}.</b>
     A stub already counts the case — finishing it adds the acuity and autonomy detail.
     <button id="go-todo" class="chip sm" style="margin-left:8px">Finish now</button></div>` + h;
+  /* MONTHLY SEND NUDGE — v3.6.15. Separate from the export nag above: that one protects the
+     logger from losing their own data, this one is the collection cadence. Only once a month
+     has turned over and only if there is something to send, so it cannot become wallpaper. */
+  if(sendOverdue())
+    h += `<div class="banner warn">✉ <b>Monthly send due.</b> ${ENTRIES.length} records here and
+      nothing sent to the collector since ${lastSend()? monthName(lastSend()) : "you started"}.
+      → Data → export, then email it to ${COLLECTOR}.
+      <button id="go-send" class="chip sm" style="margin-left:8px">Data</button></div>`;
   const can = getCanary();
   if(can && can.n > ENTRIES.length)
     h += `<div class="banner bad">🚨 <b>Entry count dropped: ${can.n} → ${ENTRIES.length}.</b>
@@ -1904,6 +2033,7 @@ function drawAlerts(){
   box.innerHTML = h;
   wireChecklist();
   const gt=$("go-todo"); if(gt) gt.onclick=()=>show("todo");
+  const gs=$("go-send"); if(gs) gs.onclick=()=>show("data");
   syncBadge();
   const badge = $("hbadge");
   const live = ENTRIES.filter(e=>e.kind==="case" && !e.simulated).length;
@@ -2018,20 +2148,21 @@ function exportReminder(){
 function exportJSON(){
   const c = cfg();
   const payload = { schemaVersion:SCHEMA, exportedAt:new Date().toISOString(),
-    site:siteLabel(), logger:c.logger||"", count:ENTRIES.length, config:c, entries:ENTRIES,
+    site:siteLabel(), logger:c.logger||"", loggerKey:userId(), count:ENTRIES.length,
+    config:Object.assign({}, c, {userId:userId()}), entries:ENTRIES,
     /* ids deleted on this phone. Without this, an OLDER export still holding a record you
        have since removed would bring it back in merge_v3.py / build_dashboard.py. */
     deleted: Array.from(DELETED) };
   const stamp = today()+"_"+(siteLabel()||"NOSITE")+"_"+ENTRIES.length+"rec_v"+SCHEMA;
   download("caselog_"+stamp+".json", JSON.stringify(payload,null,1)).then(ok=>{
     if(!ok){ toast("Export cancelled — nothing saved"); return; }
-    lsSet(K_EXP, Date.now()); rebaseCanary(); refreshAll();
+    lsSet(K_EXP, Date.now()); lsSet(K_SEND, Date.now()); rebaseCanary(); refreshAll();
     toast("Exported "+ENTRIES.length+" records — now put it somewhere that is not this phone");
   });
 }
 function exportCSV(){
   const cols = ["id","schemaVersion","kind","stub","date","savedAt","completedAt","editedAt","restoredFromId","activityType","siteId","siteName",
-    "loggerId","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description",
+    "loggerId","loggerKey","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description",
     "asaPS","qc","acuity","indication","mechanism","opStage","hemorrhage","directedProducts","attendReason","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
     "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet","loggerFte","role","success","unrecoverable","codebook"];
   const esc = ExportContract.csv;
@@ -2094,7 +2225,7 @@ $("file").onchange = function(){
         stripProto(r); stripProto(r.autonomy);
         r.savedAt = ts(r.savedAt) || (r.date+"T00:00:00.000Z");
         r.completedAt = ts(r.completedAt); r.editedAt = ts(r.editedAt);
-        ["description","cpt","task","missedTask","missedReason","missedWho","loggerId","siteId","siteName",
+        ["description","cpt","task","missedTask","missedReason","missedWho","loggerId","loggerKey","siteId","siteName",
          "siteType","loggerRank","loggerBillet","dayType"].forEach(k=>{ if(k in r) r[k]=str(r[k]); });
         r.stub=!!r.stub; r.simulated=!!r.simulated; r.taught=!!r.taught; r.soloInRoom=!!r.soloInRoom;
         r.siteOverride=!!r.siteOverride;
@@ -2141,10 +2272,20 @@ $("file").onchange = function(){
         setDemo(true);
       }
       const mine = (cfg().logger||"").trim().toUpperCase();
+      const had = ENTRIES.length > 0;
       const good = rows.filter(valid);
-      const foreign = mine ? good.filter(r=>(r.loggerId||"").trim().toUpperCase()!==mine) : [];
+      /* v3.6.15 — compare on the User ID when BOTH sides carry one; initials are free text and
+         two people may pick the same. Records predating v3.6.15 have no key: fall back to initials
+         rather than calling every one of your own older records foreign. ⛔ Still a confirm, never
+         a refusal — a hard block would lock someone out of their own pre-key backup. */
+      const myKey = userId();
+      const foreign = good.filter(r=>{
+        const k=(r.loggerKey||"").trim().toUpperCase();
+        if(k) return k!==myKey;
+        return mine ? (r.loggerId||"").trim().toUpperCase()!==mine : false;
+      });
       if(foreign.length){
-        const who = Array.from(new Set(foreign.map(r=>r.loggerId||"(blank)"))).join(", ");
+        const who = Array.from(new Set(foreign.map(r=>(r.loggerId||"(blank)")+(r.loggerKey?" · "+r.loggerKey:"")))).join(", ");
         if(!confirm("⚠ "+foreign.length+" records belong to a DIFFERENT logger ("+who+"), not "+mine+".\n\n"
           +"This phone should hold only YOUR records. Merging others here inflates your tally and can resurrect records they deleted.\n\n"
           +"Pooling exports is done on the computer with merge_v3.py, not here.\n\nImport them anyway?")) return;
@@ -2183,6 +2324,12 @@ $("file").onchange = function(){
         p.deleted.forEach(id=>{ if(typeof id==="string" && id && !present.has(id)) DELETED.add(id); });
         saveDeleted();
       }
+      /* v3.6.15 — a backup restored onto an EMPTY phone is this provider arriving on a new
+         handset, so take the User ID with it. Never when records are already here: that is
+         two logs, and one key across both would merge two people in the registry. */
+      if(!had && p.config && p.config.userId && adoptUserId(p.config.userId)){
+        alert("User ID "+userId()+" adopted from this backup — this phone is now the same logger.");
+      }
       try{ const ck=lsGet(K_CHK,{})||{}; ck.restored=true; lsSet(K_CHK,ck); }catch(e){}
       persist();
       alert("Restored. "+added+" new records added ("+rows.length+" in file)."
@@ -2207,6 +2354,7 @@ function drawSetup(){
   $("s-siteother").value = c.siteOther||"";
   $("s-logger").value = c.logger||"";
   $("s-ceiling").value = c.ceiling||"";
+  if($("s-userid")) $("s-userid").textContent = userId();
   $("s-rank").innerHTML = '<option value="">— not set —</option>' + RANKS.map(r=>`<option value="${r}">${r}</option>`).join("") + '<option value="OTHER">Other</option>';
   $("s-rank").value = c.rank||"";
   $("s-billet").innerHTML = '<option value="">— not set —</option>' + BILLETS.map(b=>`<option value="${b[0]}">${b[1]}</option>`).join("");
@@ -2215,7 +2363,36 @@ function drawSetup(){
   if($("s-fte")) $("s-fte").value = (c.fte===undefined||c.fte===null||c.fte==="")? "" : String(c.fte);
   $("s-busrc-display").textContent = BU_SOURCE + " \u00b7 " + BU_YEAR;
   $("schemav").textContent = "v"+SCHEMA;
+  if($("appv")) $("appv").textContent = APP_VERSION;
+  if($("d-userid")) $("d-userid").textContent = userId();
   $("origin").textContent = location.origin==="null"? "file:// (no home-screen install)" : location.origin;
+}
+const COLLECTOR = "66f.caselog@gmail.com";
+/* REGISTER — v3.6.15. A static page cannot tell the collector it was installed, so the person
+   does it: one tap opens a pre-filled email. That roster is what makes silence measurable —
+   without it a phone that installed and never logged is indistinguishable from one that never
+   installed. ⛔ Never auto-sends, and never includes case data. */
+function registerWithCollector(){
+  const c = cfg(), m = cfgMissing();
+  if(m.length){ toast("Finish Setup first — "+m.join(", ")); return; }
+  const body = [
+    "Registering my 66F Case Log install.",
+    "",
+    "User ID:   " + userId(),
+    "Initials:  " + (c.logger||""),
+    "Site:      " + (siteLabel()||"") + (siteTypeOf(c.site)? " ("+siteTypeOf(c.site)+")" : ""),
+    "Rank:      " + (c.rank||""),
+    "Duty:      " + (c.billet||""),
+    "App:       " + APP_VERSION,
+    "",
+    "(No case data is included in this message.)"
+  ].join("\n");
+  const url = "mailto:" + COLLECTOR
+    + "?subject=" + encodeURIComponent("66F Case Log — register " + userId() + " (" + (c.logger||"") + ")")
+    + "&body=" + encodeURIComponent(body);
+  try{ const ck=lsGet(K_CHK,{})||{}; ck.registered=true; lsSet(K_CHK,ck); }catch(e){}
+  location.href = url;
+  refreshAll();
 }
 function saveSetup(){
   /* Guard: never let an unrendered (empty) Setup form overwrite a real config. */
@@ -2223,12 +2400,25 @@ function saveSetup(){
   const formBlank = !$("s-site").value && !$("s-logger").value && !$("s-ceiling").value;
   const cfgHasData = !!(cur.site || cur.logger || cur.ceiling);
   if(formBlank && cfgHasData) return;
+  /* v3.6.15 — the site changed: bring that site's remembered ceiling with it, and do not let
+     the previous site's ceiling stand. Blank is honest for a site never set up: the Setup gate
+     then refuses to save a case until it is chosen, which is what should happen.
+     ⛔ The map is folded into the SAME setCfg below. An earlier cut wrote it separately and the
+     write below — built from `cur`, read before it — dropped it on the floor every time. */
+  const siteNow = $("s-site").value;
+  const ceilMap = Object.assign({}, ceilings());
+  if(siteNow !== (cur.site||"")){
+    $("s-ceiling").value = ceilingFor(siteNow);
+  } else if(siteNow && /^[123]$/.test($("s-ceiling").value)){
+    ceilMap[siteNow] = $("s-ceiling").value;
+  }
   /* Object.assign over `cur`: the config also carries the monthly reconciliation counts and
      end-of-day attestations, which a Setup edit must never wipe. */
   setCfg(Object.assign({}, cur, { site:$("s-site").value, siteOther:$("s-siteother").value.trim(),
     logger:$("s-logger").value.trim().toUpperCase(), ceiling:$("s-ceiling").value,
     rank:$("s-rank").value, billet:$("s-billet").value, duties:$("s-duties").value.trim(),
     fte: $("s-fte") && $("s-fte").value!=="" ? +$("s-fte").value : null,
+    ceilings:ceilMap, userId:userId(),
     busrc:BU_SOURCE, buyr:BU_YEAR }));
   $("hsub").textContent = (siteLabel()||"NO SITE") + (siteTypeOf(cfg().site) ? " · "+siteTypeOf(cfg().site) : "");
   refreshAll(); toast("Saved ✓");
@@ -2568,8 +2758,10 @@ document.addEventListener("keydown", e=>{ if(e.key==="Escape" && $("faq").classL
         g[2].filter(o=>!needsFreeText(o[0])).map(o=>`<option value="${o[0]}">${o[1]}</option>`).join("")+
         `</optgroup>`).join("");
   })();
+  migrateTo3615();
   drawActs(); drawAut(); drawPSQC(); drawICTL(); refreshAll();
   { const b = $("btn-demowipe"); if(b) b.onclick = wipeDemo; }
+  { const b = $("btn-register"); if(b) b.onclick = registerWithCollector; }
   drawDemo();
   /* first launch: run the guided tour once; replay any time via the ? button */
   try{ if(!localStorage.getItem(TOUR_KEY)) setTimeout(()=>{ if(!localStorage.getItem(TOUR_KEY)) tourStart(); }, 700); }catch(e){}
