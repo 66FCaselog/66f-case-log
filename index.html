@@ -997,7 +997,7 @@ const ICTL = ICTL_OFFICIAL.map(t=>({code:t[0], name:ICTL_TITLE[t[0]]||t[1], capt
 
 /* ══════════════════ constants ══════════════════ */
 const SCHEMA = 3;
-const APP_VERSION = "v3.6.15";
+const APP_VERSION = "v3.6.16";
 const K_MAIN = "crna_caselog_v3";
 /* Base-unit provenance is a property of the BUILD, not a user choice — the CPT
    table is embedded, so every user carries identical weights. Asking users to
@@ -1369,8 +1369,16 @@ function rememberCeiling(siteId, value){
        the data for merge_v3.py to report. ⛔ No historical record's ceiling is ever rewritten. */
 function migrateTo3615(){
   const c = cfg();
-  if(c.mig3615) return;
+  if(c.mig3615b) return;
   const key = userId(), mine = (c.logger||"").trim().toUpperCase();
+  /* ⛔ v3.6.16 — DO NOT call persist() from here, and do not stamp before this merge.
+     persist() folds the STORED array back in before writing. Stamping a key changes no
+     timestamp, so ExportContract.compare() falls through to its canonical-string tiebreak,
+     and the UNSTAMPED stored copy wins it — every record was re-loaded without its key and
+     the whole migration was discarded, silently, while the config still recorded it as done.
+     Caught on a real phone: 35 records, config migrated, 0 records stamped.
+     So: fold in what another tab may have written FIRST, stamp second, write directly. */
+  try{ loadDeleted(); mergeIn(lsGet(K_MAIN,null)); }catch(e){}
   let stamped = 0;
   ENTRIES.forEach(r=>{
     if(!r || r.loggerKey) return;
@@ -1390,12 +1398,20 @@ function migrateTo3615(){
     const best = Object.keys(tally[site]).sort((a,b)=>tally[site][b]-tally[site][a])[0];
     if(best) map[site] = String(best);
   });
-  const next = Object.assign({}, c, {ceilings:map, mig3615:true, userId:key});
+  /* v3.6.16 writes mig3615b — the v3.6.15 flag stays so a phone that ran the broken
+     migration is recognised, and re-runs this one exactly once to recover its stamps. */
+  const next = Object.assign({}, c, {ceilings:map, mig3615:true, mig3615b:true, userId:key});
   /* Setup's single ceiling now follows the current site, so an upgrade lands on the value this
      site's own records attest to — not whatever was left in the form after a site switch. */
   if(c.site && map[c.site]) next.ceiling = map[c.site];
   setCfg(next);
-  if(stamped) persist();
+  if(stamped){
+    /* direct write: the merge above already reconciled with storage, and re-merging here is
+       exactly what threw the stamps away. */
+    lsSet(K_MAIN, ENTRIES);
+    idbPut("entries", ENTRIES);
+    refreshAll();
+  }
 }
 function cfgMissing(){
   const c=cfg(), m=[];
