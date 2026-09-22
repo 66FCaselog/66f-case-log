@@ -502,7 +502,10 @@ details.sub[open]>summary{margin-bottom:10px}
   <b>editedAt</b> — corrections are auditable, never silent. Deleting is permanent.</p></details>
   <div class="sect">Backup</div>
   <button class="bigbtn" id="btn-export">⬇ EXPORT BACKUP (JSON)</button>
-  <button class="bigbtn ghost sm" id="btn-csv" style="margin-top:8px">⬇ Export CSV</button>
+  <button class="bigbtn ghost sm" id="btn-csv" style="margin-top:8px">⬇ Export CSV — for your own analysis</button>
+  <p class="hint" style="margin:4px 0 0">The CSV is a flat table for looking at in Excel. <b>Send the collector the
+  JSON backup above</b> — the CSV drops your Setup block, the per-site ceilings and the deletion history, so a log
+  cannot be rebuilt from it.</p>
   <button class="bigbtn ghost sm" id="btn-import" style="margin-top:8px">⬆ Restore from backup</button>
   <input type="file" id="file" accept=".json,application/json" class="hide">
   <p class="hint">⭐ <b>Do one test restore this week.</b> A backup you have never restored from is not a backup.</p>
@@ -997,7 +1000,7 @@ const ICTL = ICTL_OFFICIAL.map(t=>({code:t[0], name:ICTL_TITLE[t[0]]||t[1], capt
 
 /* ══════════════════ constants ══════════════════ */
 const SCHEMA = 3;
-const APP_VERSION = "v3.6.16";
+const APP_VERSION = "v3.6.17";
 const K_MAIN = "crna_caselog_v3";
 /* Base-unit provenance is a property of the BUILD, not a user choice — the CPT
    table is embedded, so every user carries identical weights. Asking users to
@@ -2136,8 +2139,19 @@ async function download(name, text, mime){
   const mobile = /iPad|iPhone|iPod|Android/.test(navigator.userAgent||"");
   if(mobile && navigator.canShare){
     try{
-      const f = new File([b], name, {type:b.type});
-      if(navigator.canShare({files:[f]})){ await navigator.share({files:[f], title:name}); return true; }
+      let f = new File([b], name, {type:b.type});
+      /* ⭐ v3.6.17 — the Web Share API refuses .json: its permitted list covers .csv, .txt,
+         images, pdf and media, and NOTHING else. So the CSV button opened the share sheet
+         (pick Gmail, file attached) while the JSON backup — the one the collector actually
+         needs — silently fell through to a download the person then had to hunt for in
+         Downloads and attach by hand. Reported from a real phone 2026-09-22, and he sent the
+         CSV because of it. Re-offer the same bytes as text/plain with .txt appended: the
+         share sheet accepts it, the content is unchanged, and intake.py reads a .json.txt as
+         the JSON it is. Desktop is unaffected — it keeps the plain download. */
+      if(!navigator.canShare({files:[f]}) && /\.json$/i.test(name)){
+        f = new File([b.slice(0, b.size, "text/plain")], name + ".txt", {type:"text/plain"});
+      }
+      if(navigator.canShare({files:[f]})){ await navigator.share({files:[f], title:f.name}); return true; }
     }catch(e){ if(e && e.name==="AbortError") return false; /* user cancelled — NOT exported */ }
   }
   const u = URL.createObjectURL(b), a=document.createElement("a");
