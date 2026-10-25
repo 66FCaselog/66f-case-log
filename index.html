@@ -220,6 +220,7 @@ details.sub[open]>summary{margin-bottom:10px}
   color:var(--faint);font-size:12.5px;line-height:1.5}
 
 
+.xwtag{font-size:10px;color:var(--muted);margin-left:8px;border:1px solid var(--muted);border-radius:6px;padding:0 4px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -314,6 +315,12 @@ details.sub[open]>summary{margin-bottom:10px}
     <label>Find the procedure — plain English</label>
     <input id="f-search" placeholder="rib, gsw, crani, fasciotomy, reboa, trach…" autocomplete="off">
     <div class="chips" id="searchres" style="margin-top:8px"></div>
+    <details class="sub" id="regionbox" style="margin-top:6px"><summary>Browse by body region — when the search can’t find it</summary>
+      <p class="hint" style="margin:6px 0">Anesthesia codes are filed by <b>body region</b>, not by operation — a lap chole lives under
+      <i>upper abdomen</i>, a tonsillectomy under <i>head</i>. Tap the region, then the code.</p>
+      <div class="chips" id="regionchips"></div>
+      <div class="chips" id="regionres" style="margin-top:8px"></div>
+    </details>
     <div class="row" style="margin-top:10px">
       <div><label>CPT</label><input id="f-cpt" inputmode="numeric" placeholder="optional"></div>
       <div><label>Base units</label><input id="f-base" inputmode="decimal" placeholder="—"></div>
@@ -509,6 +516,17 @@ details.sub[open]>summary{margin-bottom:10px}
   <button class="bigbtn ghost sm" id="btn-import" style="margin-top:8px">⬆ Restore from backup</button>
   <input type="file" id="file" accept=".json,application/json" class="hide">
   <p class="hint">⭐ <b>Do one test restore this week.</b> A backup you have never restored from is not a backup.</p>
+  <details class="sub" id="xwbox" style="margin-top:16px"><summary>ASA CROSSWALK® — licensed users only</summary>
+    <p class="hint" style="margin:6px 0">The anesthesia code list in this app is the public CMS set. The surgery-to-anesthesia-code
+    translator, <b>ASA CROSSWALK®</b>, is copyright ASA and licensed <b>per user, for internal use</b>, so this app ships without it.
+    If you or your institution hold a license, import your eFile (CSV or TXT) here. It is stored <b>only on this device</b>, it is
+    <b>never written into a backup, a CSV or an email</b>, and <b>Remove</b> wipes it. Base units always come from the CMS table,
+    never from the file. Typing a surgical CPT (47562) or words from its description then finds the anesthesia code.</p>
+    <p id="xwstatus" class="hint" style="margin:6px 0"></p>
+    <button class="bigbtn ghost sm" id="btn-xw" type="button">⬆ Import my licensed eFile</button>
+    <input type="file" id="xwfile" accept=".csv,.txt,text/csv,text/plain" class="hide">
+    <button class="bigbtn ghost sm hide" id="btn-xw-rm" type="button" style="margin-top:8px">✖ Remove it from this device</button>
+  </details>
   <button class="bigbtn ghost sm" id="btn-remind" style="margin-top:8px">📅 Add a weekly export reminder to my calendar</button>
   <p class="hint">Creates a repeating calendar event on this phone (no account, no server). The app icon also shows a
     badge with the number of records at risk once an export is 7+ days overdue — clear it by exporting.</p>
@@ -608,28 +626,28 @@ details.sub[open]>summary{margin-bottom:10px}
    anatomic anesthesia code (there is no 'fasciotomy' or 'ex-fix removal' anesthesia code) — HIS
    REVIEW PENDING. The raw CMS short descriptor is kept in col 4 as 'cms:...' so provenance is greppable. ══════════════════ */
 const ANES_CPT      = [
- ["00100","Procedures salivary gland with biopsy",5,"procedures salivary gland with biopsy cms:anes px w/bx"],
+ ["00100","Procedures salivary gland with biopsy",5,"procedures salivary gland with biopsy parotid parotidectomy submandibular sialadenectomy cms:anes px w/bx"],
  ["00102","Procedures plastic repair cleft lip",6,"procedures plastic repair cleft cms:anes px plstc rpr lip"],
  ["00103","Rcnstv procedures eyelid",5,"rcnstv procedures eyelid cms:anes px"],
  ["00104","Electroconvulsive therapy (ECT)",4,"ect electroconvulsive psych shock ther cms:anes"],
- ["00120","Ear — otologic procedures NOS",5,"ear tympanoplasty mastoid mastoidectomy ent otology procedures with biopsy cms:anes px w/bx nos"],
+ ["00120","Ear — otologic procedures NOS",5,"ear tympanoplasty mastoid mastoidectomy ent otology procedures with biopsy cochlear implant stapedectomy ossiculoplasty surgery cms:anes px w/bx nos"],
  ["00124","Ear — otoscopy",4,"procedures otoscopy cms:anes px ear"],
- ["00126","Ear — tympanotomy",4,"procedures tympanotomy cms:anes px ear"],
- ["00140","Eye — procedures NOS (open globe, enucleation, orbit)",5,"eye globe open ruptured enucleation evisceration orbit ophtho ophthalmology procedures cms:anes on nos"],
+ ["00126","Ear — tympanotomy",4,"procedures tympanotomy myringotomy tubes tympanostomy tubes pe tubes bmt bilateral myringotomy cms:anes px ear"],
+ ["00140","Eye — procedures NOS (open globe, enucleation, orbit)",5,"eye globe open ruptured enucleation evisceration orbit ophtho ophthalmology procedures strabismus muscle pterygium dcr dacryocystorhinostomy cms:anes on nos"],
  ["00142","Eye — lens surgery (cataract)",4,"cataract lens phaco ophtho eye procedures surgery cms:anes px on"],
  ["00144","Procedures eye corneal transplant",6,"procedures corneal transplant cms:anes px eye trnspl"],
  ["00145","Eye — vitreoretinal surgery",6,"retina vitrectomy retinal detachment vitreoretinal eye ophtho procedures vitreortnl surg cms:anes px"],
  ["00147","Eye — iridectomy",4,"procedures iridectomy cms:anes px on eye"],
  ["00148","Eye — ophthalmoscopy",4,"procedures ophthalmoscopy cms:anes px eye"],
- ["00160","Nose / sinuses — NOS (FESS, septoplasty, epistaxis)",5,"nose sinus fess septoplasty epistaxis nasal ent packing procedures cms:anes px nose&sinus nos"],
+ ["00160","Nose / sinuses — NOS (FESS, septoplasty, epistaxis)",5,"nose sinus fess septoplasty epistaxis nasal ent packing procedures fracture closed reduction bones cms:anes px nose&sinus nos"],
  ["00162","Procedures nose and sinus radical surg",7,"procedures nose sinus radical surg cms:anes px nose&sinus rad"],
  ["00164","Procedures nose and sinuses biopsy soft tissue",4,"procedures nose sinuses biopsy soft tissue cms:anes px nose&sins bx sft tis"],
- ["00170","Intraoral — dental, oral surgery NOS",5,"dental teeth oral mouth extraction tooth i&d abscess ludwig peritonsillar tonsil intraoral procedures cms:anes px nos"],
+ ["00170","Intraoral — dental, oral surgery NOS",5,"dental teeth oral mouth extraction tooth i&d abscess ludwig peritonsillar tonsil intraoral procedures tonsillectomy adenoidectomy adenoid tonsils t&a uppp uvulopalatopharyngoplasty frenectomy palate biopsy bleed post hemorrhage cms:anes px nos"],
  ["00172","Intraoral procedures repair clft pal",6,"intraoral procedures repair clft cms:anes ntroral px rpr pal"],
  ["00174","Intraoral excision rtrphrng tum",6,"intraoral excision rtrphrng cms:anes ntrorl exc tum"],
- ["00176","Intraoral procedures radical surg",7,"intraoral procedures radical surg cms:anes px rad"],
+ ["00176","Intraoral procedures radical surg",7,"intraoral procedures radical surg glossectomy mandibulectomy tongue free flap fibula flap microvascular cms:anes px rad"],
  ["00190","Facial bones / skull — NOS (mandible, zygoma, orbit ORIF)",5,"facial mandible zygoma zmc orbit orbital floor maxillofacial omfs oms fracture orif mmf procedures skull cms:anes px b1/skull nos"],
- ["00192","Facial bones / skull — radical, with orbital involvement",7,"facial le fort lefort orbit panfacial maxillofacial radical resection omfs procedures surg cms:anes px fcl b1/skl rad"],
+ ["00192","Facial bones / skull — radical, with orbital involvement",7,"facial le fort lefort orbit panfacial maxillofacial radical resection omfs procedures surg maxillectomy mandibulectomy free flap fibula flap microvascular cms:anes px fcl b1/skl rad"],
  ["00210","Intracranial — NOS (craniotomy: tumor, aneurysm, decompressive)",11,"crani craniotomy head brain tumor aneurysm clipping decompressive hemicraniectomy neuro neurosurgery intracranial procedures craniectomy burr hole tbi injury subdural epidural evacuation icp cms:anes px nos"],
  ["00211","Craniotomy / craniectomy — hematoma evacuation",10,"crani craniotomy craniectomy head tbi subdural sdh epidural edh hematoma bleed evacuation neuro intracranial procedures crnec crnot hmtm cms:anes icr px crnec/crnot"],
  ["00212","Intracranial — subdural taps",5,"subdural tap head neuro intracranial procedures taps cms:anes icr px"],
@@ -639,15 +657,15 @@ const ANES_CPT      = [
  ["00218","Intracranial procedures in sitting pos",13,"intracranial procedures sitting cms:anes icr px in pos"],
  ["00220","Intracranial — CSF shunting (VP shunt, EVD)",10,"shunt vp evd ventriculostomy csf drain hydrocephalus neuro intracranial procedures shunting cms:anes icr px"],
  ["00222","Intracranial procedures ecoag intracranial nerve",6,"intracranial procedures ecoag nerve cms:anes icr px nrv"],
- ["00300","Head / neck / posterior trunk — integumentary NOS",5,"skin soft tissue head neck back scalp laceration i&d abscess debridement wound procedures integ ptrunk cms:anes all px h/n/ptrunk"],
- ["00320","Neck — esophagus/thyroid/larynx/trachea/lymphatics NOS, age ≥1 (tracheostomy)",6,"tracheostomy trach larynx laryngoscopy thyroid thyroidectomy parathyroid neck dissection airway ent procedures cms:anes all px nos 1yr/>"],
+ ["00300","Head / neck / posterior trunk — integumentary NOS",5,"skin soft tissue head neck back scalp laceration i&d abscess debridement wound procedures integ ptrunk pilonidal cyst sacrococcygeal lipoma posterior trunk lesion excision sebaceous cyst flap vac scar revision melanoma wide local sentinel node sentinel lymph node biopsy dressing change change free alt radial forearm microvascular cms:anes all px h/n/ptrunk"],
+ ["00320","Neck — esophagus/thyroid/larynx/trachea/lymphatics NOS, age ≥1 (tracheostomy)",6,"tracheostomy trach larynx laryngoscopy thyroid thyroidectomy parathyroid neck dissection airway ent procedures panendoscopy triple endoscopy microlaryngoscopy direct zenker esophagoscopy mass lymph node biopsy laryngectomy revision revision change vocal cord laryngeal cms:anes all px nos 1yr/>"],
  ["00322","All procedures neck needle biopsy thyroid",3,"procedures neck needle biopsy thyroid cms:anes all px nck ndl bx thyr"],
  ["00326","All procedures larynx and trachea<1yr",7,"procedures larynx trachea pediatric airway under one year cms:anes all px larynx&trach<1yr"],
- ["00350","Neck — major vessels NOS (carotid, jugular; zone injuries)",10,"neck carotid jugular vascular zone 1 2 3 gsw stab penetrating exploration procedures major vessel cms:anes px vsl nos"],
+ ["00350","Neck — major vessels NOS (carotid, jugular; zone injuries)",10,"neck carotid jugular vascular zone 1 2 3 gsw stab penetrating exploration procedures major vessel endarterectomy cea endarterectomy stent cms:anes px vsl nos"],
  ["00352","Neck — major vessels, simple ligation",5,"neck vessel ligation carotid jugular procedures smpl cms:anes px maj vsl nck lig"],
- ["00400","Extremities / anterior trunk / perineum — integumentary NOS",3,"skin soft tissue i&d abscess debridement wound vac laceration extremity trunk perineum fournier necrotizing fasciitis integumentary cms:anes sys nos"],
- ["00402","Breast — reconstructive procedures",5,"breast reconstruction mastectomy flap tissue expander integumentary rcnstv cms:anes integ sys"],
- ["00404","Integumentary radical/modified breast",5,"integumentary radical modified breast cms:anes integ sys rad/modf brst"],
+ ["00400","Extremities / anterior trunk / perineum — integumentary NOS",3,"skin soft tissue i&d abscess debridement wound vac laceration extremity trunk perineum fournier necrotizing fasciitis integumentary graft stsg split thickness graft donor site lipoma sebaceous cyst breast biopsy lumpectomy breast lump excision simple mastectomy liposuction lipo abdominoplasty panniculectomy hidradenitis lesion dressing change change body contouring brachioplasty thighplasty scar revision melanoma wide local sentinel node sentinel lymph node groin dissection inguinal lymph node dissection lymphadenectomy cms:anes sys nos"],
+ ["00402","Breast — reconstructive procedures",5,"breast reconstruction mastectomy flap tissue expander integumentary rcnstv reduction reduction mammoplasty augmentation implant exchange diep tram latissimus free microvascular cms:anes integ sys"],
+ ["00404","Integumentary radical/modified breast",5,"integumentary radical modified breast mastectomy mastectomy axillary dissection cms:anes integ sys rad/modf brst"],
  ["00406","Integumentary radical breast dissection",13,"integumentary radical breast dissection cms:anes integ sys rad brst dsj"],
  ["00410","Electrical cardioversion of arrhythmia",4,"cardioversion dccv afib arrhythmia shock integumentary conv arrhyt cms:anes integ sys"],
  ["00450","Clavicle / scapula — procedures NOS",5,"clavicle scapula collarbone orif procedures shoulder girdle cms:anes px clav&scapula nos"],
@@ -655,31 +673,31 @@ const ANES_CPT      = [
  ["00470","Partial rib resection NOS (rib plating, SSRF)",6,"rib ribs chest wall flail ssrf plating fixation fracture partial resection thoracoplasty cms:anes rescj nos"],
  ["00472","Partial rib resection — thoracoplasty",10,"rib chest wall thoracoplasty prtl resection thoracop flail cms:anes rescj"],
  ["00474","Partial rib resection — radical (chest wall tumor)",13,"rib chest wall radical resection tumor prtl procedures thoracoplasty thoracogenic cms:anes rescj rad px"],
- ["00500","Esophagus — all procedures",15,"esophagus esophageal esophagectomy perforation boerhaave nissen procedures cms:anes all px on"],
- ["00520","Closed chest — NOS (bronchoscopy, chest tube)",6,"chest tube thoracostomy bronch bronchoscopy closed ebus procedures pleural drain cms:anes px nos"],
+ ["00500","Esophagus — all procedures",15,"esophagus esophageal esophagectomy perforation boerhaave nissen procedures foreign body food bolus cms:anes all px on"],
+ ["00520","Closed chest — NOS (bronchoscopy, chest tube)",6,"chest tube thoracostomy bronch bronchoscopy closed ebus procedures pleural drain rigid rigid foreign body airway foreign body thoracentesis placement pigtail catheter catheter pleurx cms:anes px nos"],
  ["00522","Closed chest procedures needle biopsy pleur",4,"closed chest procedures needle biopsy pleur cms:anes clsd ch px ndl bx"],
  ["00524","Closed chest — pneumocentesis",4,"pneumocentesis chest tube thoracostomy pneumothorax closed procedures pneumocents needle decompression cms:anes clsd ch px"],
  ["00528","Closed chest — mediastinoscopy / thoracoscopy WITHOUT one-lung ventilation",8,"mediastinoscopy mediastinum vats thoracoscopy no olv closed chest mediast thrc cms:anes clsd ch mediast&thrc wo"],
- ["00529","Closed chest — mediastinoscopy / thoracoscopy WITH one-lung ventilation",11,"vats thoracoscopy olv one lung ventilation dlt double lumen mediastinoscopy closed chest mediast thrc with cms:anes clsd ch mediast&thrc w/"],
+ ["00529","Closed chest — mediastinoscopy / thoracoscopy WITH one-lung ventilation",11,"vats thoracoscopy olv one lung ventilation dlt double lumen mediastinoscopy closed chest mediast thrc with thymectomy mediastinal mass cms:anes clsd ch mediast&thrc w/"],
  ["00530","Permanent transvenous pacemaker insertion",4,"pacemaker pacer ppm transvenous cardiology perm transvns insj cms:anes pm"],
- ["00532","Central venous circulation — access",4,"central line cvc cvl port portacath tunneled catheter dialysis permcath venous access crcj cordis introducer femoral ij subclavian cms:anes ctr"],
+ ["00532","Central venous circulation — access",4,"central line cvc cvl port portacath tunneled catheter dialysis permcath venous access crcj cordis introducer femoral ij subclavian placement a cath mediport hickman placement cms:anes ctr"],
  ["00534","Transvenous ICD insertion / replacement",7,"icd defibrillator aicd cardiology insertion replacement cvdfb cms:anes insertion/rplcmt"],
  ["00537","Cardiac electrophysiology / ablation",10,"ep electrophysiology ablation afib svt cardiology cardiac procedures cms:anes"],
  ["00539","Tracheobronchial reconstruction",18,"tracheobronchial reconstruction airway cms:anes rcnstj"],
- ["00540","Thoracotomy — NOS, WITHOUT one-lung ventilation (incl. resuscitative)",12,"thoracotomy chest rib lung trauma gsw stab resuscitative clamshell ed pericardial window no olv procedures hemothorax open cms:anes px nos"],
+ ["00540","Thoracotomy — NOS, WITHOUT one-lung ventilation (incl. resuscitative)",12,"thoracotomy chest rib lung trauma gsw stab resuscitative clamshell ed pericardial window no olv procedures hemothorax open thymectomy mediastinal mass cms:anes px nos"],
  ["00541","Thoracotomy — WITH one-lung ventilation",15,"thoracotomy olv one lung ventilation dlt double lumen lobectomy pneumonectomy wedge chest procedures vntj cms:anes thrcm px 1"],
  ["00542","Thoracotomy — decortication",15,"decortication empyema hemothorax retained lung chest thoracotomy procedures cms:anes thrcm px"],
  ["00546","Thoracotomy procedures pulmonary resection",15,"thoracotomy procedures pulmonary resection cms:anes thrcm px pulm rescj"],
  ["00548","Thoracotomy — trachea / bronchi",17,"trachea bronchus airway reconstruction tracheal resection bronchial repair thoracotomy procedures bronchi cms:anes thrcm px trach&bronchi"],
  ["00550","Sternal debridement",10,"sternum sternal debridement wound mediastinitis washout cms:anes for"],
- ["00560","Heart / pericardium / great vessels of chest — WITHOUT pump",15,"heart pericardium pericardial window great vessel thoracic aorta tevar subclavian innominate no pump cardiac procedures without oxtj cms:anes px w/o"],
+ ["00560","Heart / pericardium / great vessels of chest — WITHOUT pump",15,"heart pericardium pericardial window great vessel thoracic aorta tevar subclavian innominate no pump cardiac procedures without oxtj sternotomy sternal closure delayed sternal closure chest closure cms:anes px w/o"],
  ["00561","Procedures heart with pump<1 yr",25,"procedures heart with pump cms:anes px w/pump<1 yr"],
  ["00562","Heart / pericardium / great vessels — WITH pump, age ≥1",20,"heart pump bypass cpb cardiac valve avr mvr open procedures with cms:anes px hrt w/pump age 1yr+"],
  ["00563","Heart — with pump, hypothermic circulatory arrest",25,"heart pump hypothermic circulatory arrest dhca aortic arch cardiac procedures with arst cms:anes px w/pmp crc"],
  ["00566","CABG — WITHOUT pump (off-pump)",25,"cabg off pump opcab coronary bypass cardiac direct without cms:anes w/o"],
  ["00567","CABG — WITH pump",18,"cabg pump bypass coronary cpb cardiac direct with cms:anes w/pump"],
  ["00580","Heart / lung transplant",20,"transplant heart lung cardiac cms:anes heart/lung"],
- ["00600","Cervical spine and cord — NOS",10,"cervical spine c-spine neck acdf fusion laminectomy neuro ortho procedures cord cms:anes px crv spine&cord nos"],
+ ["00600","Cervical spine and cord — NOS",10,"cervical spine c-spine neck acdf fusion laminectomy neuro ortho procedures cord pcdf posterior cms:anes px crv spine&cord nos"],
  ["00604","Cervical spine and cord — sitting position",13,"cervical spine sitting position neuro procedures cord cms:anes px crv spn&cord"],
  ["00620","Thoracic spine and cord — NOS",10,"thoracic spine t-spine fusion laminectomy neuro ortho procedures thrc cord cms:anes px spine&cord nos"],
  ["00625","Thoracic spine — anterior transthoracic approach WITHOUT one-lung ventilation",13,"thoracic spine anterior transthoracic corpectomy thrc vent cms:anes wo 1lng"],
@@ -692,36 +710,36 @@ const ANES_CPT      = [
  ["00700","Upper anterior abdominal wall — NOS",4,"abdominal wall upper anterior procedures abdomen cms:anes px upr ant abd nos"],
  ["00702","Upper anterior abdomen wall lvr biopsy",4,"upper anterior abdomen wall biopsy cms:anes upr ant abd lvr bx"],
  ["00730","Upper posterior abdominal wall (flank) — NOS",5,"flank posterior abdominal wall upper procedures cms:anes px pst abdl"],
- ["00731","Upper GI endoscopy — NOS (EGD)",5,"egd endoscopy upper gi scope lab peg gastroscopy procedures cms:anes upr ndsc px nos"],
+ ["00731","Upper GI endoscopy — NOS (EGD)",5,"egd endoscopy upper gi scope lab peg gastroscopy procedures tube gastrostomy tube g tube feeding tube cms:anes upr ndsc px nos"],
  ["00732","Upper GI endoscopy — ERCP",6,"ercp endoscopy biliary gi upper procedures cms:anes upr ndsc px"],
- ["00750","Hernia repair — upper abdomen NOS",4,"hernia upper abdomen umbilical epigastric repair cms:anes hrna rpr upr abd nos"],
+ ["00750","Hernia repair — upper abdomen NOS",4,"hernia upper abdomen umbilical epigastric repair incarcerated strangulated cms:anes hrna rpr upr abd nos"],
  ["00752","Hernia repair — lumbar / ventral / incisional / dehiscence",6,"hernia ventral incisional lumbar dehiscence abdominal wall reconstruction repair lmbr dehs cms:anes hrna rpr lmbr&vnt&/dehs"],
  ["00754","Hernia repair omphalocele",7,"hernia repair omphalocele cms:anes hrna rpr"],
- ["00756","Hernia repair — transabdominal diaphragmatic",7,"diaphragm diaphragmatic hernia rupture repair diphrg cms:anes hrna rpr"],
+ ["00756","Hernia repair — transabdominal diaphragmatic",7,"diaphragm diaphragmatic hernia rupture repair diphrg hiatal paraesophageal cms:anes hrna rpr"],
  ["00770","Major abdominal blood vessels (AAA, aortic injury)",15,"aorta aaa aortic vascular reboa major vessel open mesenteric sma procedures abdomen blood occlusion abdominal trauma cms:anes px maj abd"],
- ["00790","Intraperitoneal upper abdomen — NOS (ex-lap, bowel, liver, spleen)",7,"exlap ex-lap ex lap laparotomy gsw stab trauma bowel liver spleen splenectomy damage control belly chole cholecystectomy appendectomy appy sbo resection colectomy washout intraperitoneal upper abdomen exploratory celiotomy second look pack removal cms:anes iper upr abd nos"],
- ["00792","Partial hepatectomy / liver resection",13,"liver hepatectomy resection hepatic intraperitoneal upper abdomen prtl hptc cms:anes iper upr abd"],
- ["00794","Pancreatectomy — partial or total (Whipple)",8,"whipple pancreas pancreatectomy pancreatic intraperitoneal upper abdomen pncrtect cms:anes iper upr abd"],
+ ["00790","Intraperitoneal upper abdomen — NOS (ex-lap, bowel, liver, spleen)",7,"exlap ex-lap ex lap laparotomy gsw stab trauma bowel liver spleen splenectomy damage control belly chole cholecystectomy appendectomy appy sbo resection colectomy washout intraperitoneal upper abdomen exploratory celiotomy second look pack removal perforated ulcer graham patch omental patch perforation gastrostomy g tube j tube jejunostomy feeding tube open bile duct common bile duct exploration cbd cholangiogram choledochal hiatal hernia paraesophageal hernia heller myotomy abdominal closure temporary abdominal closure open abthera cms:anes iper upr abd nos"],
+ ["00792","Partial hepatectomy / liver resection",13,"liver hepatectomy resection hepatic intraperitoneal upper abdomen prtl hptc laceration hemorrhage packing trauma cms:anes iper upr abd"],
+ ["00794","Pancreatectomy — partial or total (Whipple)",8,"whipple pancreas pancreatectomy pancreatic intraperitoneal upper abdomen pncrtect distal cms:anes iper upr abd"],
  ["00796","Liver transplant — recipient",30,"liver transplant intraperitoneal upper abdomen cms:anes iper upr abd lvr trnspl"],
- ["00797","Gastric restrictive procedure — morbid obesity",11,"bariatric sleeve gastrectomy gastric bypass roux obesity intraperitoneal upper abdomen gstr procedures cms:anes iper upr abd px mo"],
+ ["00797","Gastric restrictive procedure — morbid obesity",11,"bariatric sleeve gastrectomy gastric bypass roux obesity intraperitoneal upper abdomen gstr procedures lap en y cms:anes iper upr abd px mo"],
  ["00800","Lower anterior abdominal wall — NOS",4,"abdominal wall lower anterior procedures cms:anes px lwr ant abdl wal nos"],
  ["00802","Lower abdominal wall — panniculectomy",5,"panniculectomy pannus abdominoplasty procedures lower abdominal pannic cms:anes px lwr abdl wal"],
  ["00811","Lower intestinal endoscopy — NOS (colonoscopy, non-screening)",4,"colonoscopy colon scope lower gi endoscopy sigmoidoscopy lab intst cms:anes lwr ndsc nos"],
  ["00812","Lower intestinal endoscopy — SCREENING colonoscopy",3,"screening colonoscopy colon scope gi lab lower intst colsc cms:anes lwr scr"],
  ["00813","Upper AND lower GI endoscopy — same session",5,"egd colonoscopy combined double scope bidirectional gi lab upper lower endoscopy procedures cms:anes upr lwr ndsc px"],
  ["00820","Lower posterior abdominal wall (flank) — NOS",5,"flank posterior abdominal wall lower procedures cms:anes px lwr post abdl"],
- ["00830","Hernia repair — lower abdomen NOS (inguinal, femoral)",4,"hernia inguinal femoral groin repair lower abdomen cms:anes rpr lwr abd nos"],
+ ["00830","Hernia repair — lower abdomen NOS (inguinal, femoral)",4,"hernia inguinal femoral groin repair lower abdomen incarcerated strangulated cms:anes rpr lwr abd nos"],
  ["00832","Hernia repair — ventral / incisional, lower abdomen",6,"hernia ventral incisional lower abdominal wall repair incal cms:anes vnt&incal"],
  ["00834","Hernia repair<1 yr age",5,"hernia repair cms:anes repair<1 yr age"],
  ["00836","Hernia repair<37wk brth<50",6,"hernia repair brth cms:anes hrna rpr<37wk brth<50"],
- ["00840","Intraperitoneal lower abdomen — NOS (pelvic, sigmoid, ovarian)",6,"exlap laparotomy pelvic lower gsw stab trauma sigmoid colectomy lar ovarian cyst ectopic tah hysterectomy diagnostic lap intraperitoneal procedures abdomen packing bladder rectum damage control cms:anes iper px abd nos"],
+ ["00840","Intraperitoneal lower abdomen — NOS (pelvic, sigmoid, ovarian)",6,"exlap laparotomy pelvic lower gsw stab trauma sigmoid colectomy lar ovarian cyst ectopic tah hysterectomy diagnostic lap intraperitoneal procedures abdomen packing bladder rectum damage control colostomy ileostomy ostomy takedown reversal hartmann small bowel obstruction sbo lysis of adhesions tlh total laparoscopic myomectomy fibroid volvulus diverticulitis perforated diverticulitis appendiceal abscess abdominal closure temporary abdominal closure open abthera second look cms:anes iper px abd nos"],
  ["00842","Intraperitoneal lower abdomen — amniocentesis",4,"amniocentesis ob intraperitoneal procedures cms:anes iper px"],
  ["00844","Intraperitoneal procedures abdmnprnl resection",7,"intraperitoneal procedures abdmnprnl resection abdominoperineal cms:anes iper px rescj"],
  ["00846","Radical hysterectomy",8,"radical hysterectomy gyn onc intraperitoneal procedures hystrectomy cms:anes iper px rad"],
  ["00848","Intraperitoneal procedures pel exentration",8,"intraperitoneal procedures exentration cms:anes iper px pel"],
  ["00851","Tubal ligation / transection",6,"tubal ligation btl sterilization ob gyn intraperitoneal procedures cms:anes iper px"],
  ["00860","Extraperitoneal lower abdomen — NOS",6,"extraperitoneal lower abdomen retroperitoneal procedures cms:anes xtrprtl px lwr abd nos"],
- ["00862","Renal procedures incl. upper ureter — nephrectomy (incl. donor)",7,"kidney nephrectomy renal ureter donor urology extraperitoneal lower abdomen procedures cms:anes xtrprtl lwr abd rnl px"],
+ ["00862","Renal procedures incl. upper ureter — nephrectomy (incl. donor)",7,"kidney nephrectomy renal ureter donor urology extraperitoneal lower abdomen procedures pcnl nephrolithotomy percutaneous nephrolithotomy nephrostomy cms:anes xtrprtl lwr abd rnl px"],
  ["00864","Total cystectomy",8,"cystectomy bladder urology extraperitoneal lower abdomen cstc cms:anes xtrprt lwr abd tot"],
  ["00865","Radical prostatectomy",7,"prostatectomy prostate radical robotic urology extraperitoneal lower abdomen prst cms:anes xtrprt lwr abd prst8ect"],
  ["00866","Adrenalectomy",10,"adrenal adrenalectomy pheochromocytoma pheo extraperitoneal lower abdomen adrnlctmy cms:anes xtrprt lw abd"],
@@ -731,7 +749,7 @@ const ANES_CPT      = [
  ["00873","ESWL lithotripsy — without water bath",5,"eswl lithotripsy shock wave stone kidney urology lithotrp cms:anes esw wo wtr bth"],
  ["00880","Major lower abdominal vessels — NOS (iliac)",15,"iliac vascular lower abdomen major vessel aortobifemoral abdominal trauma aorta cms:anes maj lwr abd nos"],
  ["00882","Inferior vena cava ligation",10,"ivc vena cava ligation lower vessel vascular trauma cms:anes maj lwr adb vsl lig"],
- ["00902","Anorectal procedures",5,"anorectal hemorrhoid fistula fissure perirectal abscess i&d exam under anesthesia eua procedures cms:anes px"],
+ ["00902","Anorectal procedures",5,"anorectal hemorrhoid fistula fissure perirectal abscess i&d exam under anesthesia eua procedures fistulotomy fistulectomy anal seton sphincterotomy perianal hemorrhoidectomy rectal foreign body cms:anes px"],
  ["00904","Radical perineal procedure",7,"perineal radical apr abdominoperineal procedures cms:anes px"],
  ["00906","Vulvectomy",4,"vulvectomy cms:anes"],
  ["00908","Perineal prostatectomy",6,"perineal prostatectomy cms:anes"],
@@ -740,7 +758,7 @@ const ANES_CPT      = [
  ["00914","Transurethral resection of prostate (TURP)",5,"turp prostate transurethral urology trurl procedures resection prst cms:anes px rescj prst8"],
  ["00916","Trurl procedures resection bleeding",5,"trurl procedures resection bleeding cms:anes px rescj"],
  ["00918","Transurethral — ureteral stone removal (ureteroscopy)",5,"stone ureteroscopy lithotripsy laser bladder urology trurl procedures urtrl removal cms:anes px cal rmvl"],
- ["00920","Male genitalia — NOS",3,"scrotum testicle orchiectomy hydrocele penile male genitalia torsion procedures cms:anes px nos"],
+ ["00920","Male genitalia — NOS",3,"scrotum testicle orchiectomy hydrocele penile male genitalia torsion procedures circumcision hydrocelectomy varicocele hypospadias cms:anes px nos"],
  ["00921","Procedures male genitalia vasec",3,"procedures male genitalia vasec cms:anes px"],
  ["00922","Male genitalia — seminal vesicles",6,"procedures male gent cms:anes px sem ves"],
  ["00924","Male gent undscnd tstis",4,"male gent undscnd tstis cms:anes"],
@@ -762,14 +780,14 @@ const ANES_CPT      = [
  ["01130","Body cast — application / revision",3,"body cast spica application revision cms:anes appl/revj"],
  ["01140","Interpelviabdominal (hindquarter) amputation",15,"hindquarter amputation hemipelvectomy ntrplvabdmnl interpelviabdominal traumatic cms:anes"],
  ["01150","Radical procedures tumor of pelvis",10,"radical procedures tumor pelvis cms:anes rad px of"],
- ["01160","Symphysis pubis / SI joint — closed procedures (pelvic binder, closed reduction)",4,"pelvis closed reduction binder pelvic procedures symph joint cms:anes clsd px pub/si jt"],
- ["01170","Symphysis pubis / SI joint — open procedures",8,"pelvis pelvic ring symphysis si joint open orif ortho procedures symph cms:anes opn px pub/si jt"],
+ ["01160","Symphysis pubis / SI joint — closed procedures (pelvic binder, closed reduction)",4,"pelvis closed reduction binder pelvic procedures symph joint sacral fracture sacroiliac screw si screw iliosacral percutaneous fixation cms:anes clsd px pub/si jt"],
+ ["01170","Symphysis pubis / SI joint — open procedures",8,"pelvis pelvic ring symphysis si joint open orif ortho procedures symph sacral fracture cms:anes opn px pub/si jt"],
  ["01173","Pelvis / acetabulum — open repair of fracture",12,"pelvis acetabulum acetabular fracture orif pelvic ring open reduction ortho trauma repair disruption cms:anes opn rpr fx disrpj plvs"],
  ["01200","Hip joint — closed procedures (reduction)",4,"hip closed reduction dislocation procedures joint cms:anes all px"],
- ["01202","Arthroscopic procedures hip joint",4,"arthroscopic procedures joint cms:anes px hip jt"],
+ ["01202","Arthroscopic procedures hip joint",4,"arthroscopic procedures joint arthroscopy scope labral repair labrum fai cms:anes px hip jt"],
  ["01210","Hip joint — open NOS (hip fracture fixation, hemiarthroplasty)",6,"hip fracture hemiarthroplasty hemi neck of femur intertrochanteric it orif nail ortho open procedures joint cms:anes px nos"],
  ["01212","Hip joint — disarticulation",10,"hip disarticulation amputation open procedures joint cms:anes px jt disrtcj"],
- ["01214","Total hip arthroplasty",8,"tha total hip replacement arthroplasty open procedures cms:anes px tot arthrp"],
+ ["01214","Total hip arthroplasty",8,"tha total hip replacement arthroplasty open procedures periprosthetic fracture revision cms:anes px tot arthrp"],
  ["01215","Open revision tot hip arthroplasty",10,"open revision arthroplasty cms:anes opn revj tot hip arthrp"],
  ["01220","Closed procedures upper 2/3 femur",4,"closed procedures upper femur two thirds traction cms:anes clsd px 2/3"],
  ["01230","Upper 2/3 femur — open NOS (femoral shaft IM nail)",6,"femur femoral shaft im nail intramedullary orif ortho open upper washout debridement external fixator exfix ex-fix fix removal cms:anes opn 2/3 nos"],
@@ -783,12 +801,12 @@ const ANES_CPT      = [
  ["01320","Knee / popliteal — nerves, muscles, tendons, fascia",4,"knee popliteal soft tissue tendon procedures nerve muscle fasciotomy compartment cms:anes all px nrv msc kne&/pop"],
  ["01340","Closed procedures lower 1/3 femur",4,"closed procedures lower femur cms:anes clsd px 1/3"],
  ["01360","Lower 1/3 femur — open procedures (distal femur ORIF)",5,"distal femur supracondylar orif lower third open procedures cms:anes px 1/3"],
- ["01380","All closed procedures knee joint",3,"closed procedures knee joint reduction cms:anes all clsd px"],
+ ["01380","All closed procedures knee joint",3,"closed procedures knee joint reduction manipulation under anesthesia mua cms:anes all clsd px"],
  ["01382","Knee joint — diagnostic arthroscopy",3,"knee scope arthroscopy diagnostic arthroscopic procedures joint cms:anes dx arthrs px jt"],
  ["01390","Closed procedures upper tibia fibula and /patella",3,"closed procedures upper tibia fibula patella reduction cms:anes cls px upr tib fib&/pat"],
  ["01392","Upper tibia / fibula / patella — open (tibial plateau ORIF)",4,"tibial plateau proximal tibia patella orif knee ortho open procedures upper fibula cms:anes opn px upr tib fib&/pat"],
- ["01400","Knee joint — open / arthroscopic NOS (ACL, meniscus)",4,"knee scope acl meniscus arthroscopy open ortho arthroscopic joint washout irrigation debridement ligament cms:anes opn/arthrs jt nos"],
- ["01402","Total knee arthroplasty",7,"tka total knee replacement arthroplasty open arth cms:anes opn/arth tot kne arthrp"],
+ ["01400","Knee joint — open / arthroscopic NOS (ACL, meniscus)",4,"knee scope acl meniscus arthroscopy open ortho arthroscopic joint washout irrigation debridement ligament reconstruction reconstruction repair meniscectomy cms:anes opn/arthrs jt nos"],
+ ["01402","Total knee arthroplasty",7,"tka total knee replacement arthroplasty open arth revision revision periprosthetic fracture cms:anes opn/arth tot kne arthrp"],
  ["01404","Knee — disarticulation (through-knee amputation)",5,"knee disarticulation through amputation open arthroscopic cms:anes opn/arthrs disrtcj"],
  ["01420","Cast application removal/repair knee joint",3,"cast application removal repair knee joint external fixator exfix ex-fix fix hardware cms:anes cst appl rmv/rpr kne jt"],
  ["01430","Knee / popliteal — veins NOS",3,"popliteal vein knee vascular procedures veins cms:anes px knee&pop nos"],
@@ -798,22 +816,22 @@ const ANES_CPT      = [
  ["01444","Procedures artery knee and popliteal excision and grf",8,"procedures artery knee popliteal excision graft bypass vascular cms:anes px art knee&pop exc&grf"],
  ["01462","Lower leg / ankle / foot — closed procedures",3,"ankle closed reduction lower leg foot procedures cms:anes clsd px l/a/f"],
  ["01464","Arthroscopic procedures ankle and /foot",3,"arthroscopic procedures ankle foot arthroscopy cms:anes arthrs px ankle&/foot"],
- ["01470","Lower leg / ankle / foot — nerves, muscles, tendons, fascia (fasciotomy, I&D)",3,"fasciotomy compartment leg tendon achilles i&d debridement lower soft tissue procedures nerve muscle ankle foot syndrome calf cms:anes px nrv msc lw l/a/f nos"],
+ ["01470","Lower leg / ankle / foot — nerves, muscles, tendons, fascia (fasciotomy, I&D)",3,"fasciotomy compartment leg tendon achilles i&d debridement lower soft tissue procedures nerve muscle ankle foot syndrome calf diabetic abscess cms:anes px nrv msc lw l/a/f nos"],
  ["01472","Repair rpt achilles tendon",5,"repair achilles tendon rupture cms:anes rpr rpt"],
  ["01474","Gastrocnemius recession",5,"gastrocnemius recession cms:anes"],
- ["01480","Lower leg / ankle / foot bones — open NOS (tibia/ankle ORIF, BKA)",3,"orif tibia fibula ankle foot fracture ortho im nail bka below knee amputation washout ex-fix open procedures lower leg irrigation debridement cms:anes px l/a/f nos"],
+ ["01480","Lower leg / ankle / foot bones — open NOS (tibia/ankle ORIF, BKA)",3,"orif tibia fibula ankle foot fracture ortho im nail bka below knee amputation washout ex-fix open procedures lower leg irrigation debridement toe toe amp ray transmetatarsal tma bunion bunionectomy hallux valgus hammer toe hammertoe calcaneus calcaneal lisfranc midfoot talus metatarsal diabetic cms:anes px l/a/f nos"],
  ["01482","Open lower leg/ankle/foot radical resection",4,"open lower ankle foot radical resection leg cms:anes opn lwr l/a/f rad rescj"],
  ["01484","Open lower leg/ankle/foot oste/ostpl",4,"open lower ankle foot oste ostpl osteotomy osteoplasty leg cms:anes opn lw l/a/f oste/ostpl"],
  ["01486","Total ankle replacement",7,"ankle replacement arthroplasty open total cms:anes rplcmt"],
- ["01490","Lower leg cast application removal/repair",3,"lower cast application removal repair leg external fixator exfix ex-fix fix hardware splint cms:anes lwr cst app rmv/rpr"],
+ ["01490","Lower leg cast application removal/repair",3,"lower cast application removal repair leg external fixator exfix ex-fix fix hardware splint change closed reduction cms:anes lwr cst app rmv/rpr"],
  ["01500","Lower leg arteries — NOS",8,"procedures artery lower leg vascular trauma tibial cms:anes px art nos"],
  ["01502","Lower leg — arterial embolectomy",6,"embolectomy lower leg vascular thrombectomy procedures artery cms:anes px art emblc"],
  ["01520","Lower leg veins — NOS",3,"procedures veins lower cms:anes px leg nos"],
  ["01522","Procedures vein lower leg ven thrmb",5,"procedures vein lower thrmb cms:anes px vn lwr leg ven"],
  ["01610","Shoulder / axilla — nerves, muscles, tendons, fascia (rotator cuff open)",5,"shoulder axilla rotator cuff soft tissue procedures nerve muscle fasciotomy compartment cms:anes all px nrv musc sho&ax"],
- ["01620","Closed procedures shoulder joint",4,"closed procedures shoulder joint reduction dislocation cms:anes clsd px"],
+ ["01620","Closed procedures shoulder joint",4,"closed procedures shoulder joint reduction dislocation manipulation under anesthesia mua cms:anes clsd px"],
  ["01622","Shoulder joint — diagnostic arthroscopy",4,"shoulder scope arthroscopy diagnostic arthroscopic procedures joint cms:anes dx arthr px jt"],
- ["01630","Shoulder joint — open / arthroscopic NOS (proximal humerus ORIF, cuff repair)",5,"shoulder scope arthroscopy proximal humerus orif rotator cuff labrum bankart ortho open arthroscopic procedures joint washout irrigation debridement cms:anes opn/arthr px sho jt nos"],
+ ["01630","Shoulder joint — open / arthroscopic NOS (proximal humerus ORIF, cuff repair)",5,"shoulder scope arthroscopy proximal humerus orif rotator cuff labrum bankart ortho open arthroscopic procedures joint washout irrigation debridement labral repair slap cms:anes opn/arthr px sho jt nos"],
  ["01634","Shoulder joint — disarticulation",9,"shoulder disarticulation amputation forequarter open arthroscopic cms:anes open/arthrs sho disrtcj"],
  ["01636","Open/arthroscopic ntrthrc amputation",15,"open arthroscopic ntrthrc amputation forequarter interthoracic shoulder cms:anes open/arthr amp"],
  ["01638","Total shoulder arthroplasty",10,"shoulder replacement arthroplasty reverse tsa open arthroscopic total cms:anes opn/arthr tot sho rplcm"],
@@ -829,7 +847,7 @@ const ANES_CPT      = [
  ["01716","Nerve muscle upper a and e tndsis",5,"nerve muscle upper tndsis biceps tendon repair cms:anes nrv msc upr a&e"],
  ["01730","Closed procedures humerus and elbow",3,"closed procedures humerus elbow reduction cms:anes clsd px humerus&elbow"],
  ["01732","Elbow joint — diagnostic arthroscopy",3,"elbow scope arthroscopy diagnostic arthroscopic procedures joint cms:anes dx arthrs px jt"],
- ["01740","Elbow — open / arthroscopic NOS (elbow ORIF)",4,"elbow orif humerus humeral shaft olecranon distal ortho open arthroscopic procedures elbw washout debridement external fixator exfix ex-fix fix removal cms:anes opn/arthrs px nos"],
+ ["01740","Elbow — open / arthroscopic NOS (elbow ORIF)",4,"elbow orif humerus humeral shaft olecranon distal ortho open arthroscopic procedures elbw washout debridement external fixator exfix ex-fix fix removal radial head fracture cms:anes opn/arthrs px nos"],
  ["01742","Open/arthroscopic elbw osteotomy",5,"open arthroscopic elbw osteotomy humeral cms:anes opn/arthrs osteot"],
  ["01744","Open/arthroscopic elbw repair hum",5,"open arthroscopic elbw repair humeral nonunion malunion cms:anes opn/arthrs rpr hum"],
  ["01756","Open/arthroscopic elbw radical procedures",6,"open arthroscopic elbw radical procedures humerus resection cms:anes opn/arthrs rad px"],
@@ -839,10 +857,10 @@ const ANES_CPT      = [
  ["01772","Upper arm / elbow — embolectomy",6,"embolectomy brachial upper arm vascular artery elbw cms:anes art upr arm&elbw emblc"],
  ["01780","Upper arm / elbow — veins NOS",3,"veins upper arm elbow procedures vein elbw cms:anes px vn upr arm&elbw nos"],
  ["01782","Vein upper arm and elbw phlbrpy",4,"vein upper elbw phlbrpy cms:anes vn upr arm&elbw"],
- ["01810","Forearm / wrist / hand — nerves, muscles, tendons, fascia (fasciotomy, tendon repair)",3,"fasciotomy compartment forearm hand tendon nerve repair carpal tunnel flexor soft tissue procedures muscle wrist cms:anes px nrv musc f/arm wrst"],
- ["01820","Forearm / wrist / hand bones — CLOSED procedures",3,"closed reduction forearm wrist hand cast procedures with bones radius ulna cms:anes clsd px rds u/w/h"],
+ ["01810","Forearm / wrist / hand — nerves, muscles, tendons, fascia (fasciotomy, tendon repair)",3,"fasciotomy compartment forearm hand tendon nerve repair carpal tunnel flexor soft tissue procedures muscle wrist trigger finger release dupuytren release release cms:anes px nrv musc f/arm wrst"],
+ ["01820","Forearm / wrist / hand bones — CLOSED procedures",3,"closed reduction forearm wrist hand cast procedures with bones radius ulna change application cms:anes clsd px rds u/w/h"],
  ["01829","Diagnostic arthroscopic procedures wrist",3,"diagnostic arthroscopic procedures wrist arthroscopy cms:anes dx px wrst"],
- ["01830","Distal radius / distal ulna / wrist / hand joints — open or arthroscopic NOS (distal radius ORIF)",3,"orif distal radius ulna wrist hand fracture open scaphoid metacarpal washout ortho arthroscopic endoscopy irrigation debridement cms:anes arthr/ndsc wrst/hnd nos"],
+ ["01830","Distal radius / distal ulna / wrist / hand joints — open or arthroscopic NOS (distal radius ORIF)",3,"orif distal radius ulna wrist hand fracture open scaphoid metacarpal washout ortho arthroscopic endoscopy irrigation debridement both bone forearm bbfa shaft forearm cms:anes arthr/ndsc wrst/hnd nos"],
  ["01832","Arthroscopic/endoscopy tot wrist replacement",6,"arthroscopic endoscopy wrist replacement cms:anes arthr/ndsc tot wrst rpl"],
  ["01840","Forearm / wrist / hand arteries — NOS",6,"artery forearm wrist hand vascular trauma radial ulnar cms:anes art f/arm wrst&hnd nos"],
  ["01842","Artery farm wrist and hand embolectomy",6,"artery farm wrist hand embolectomy forearm cms:anes art wrst&hnd emblc"],
@@ -851,7 +869,7 @@ const ANES_CPT      = [
  ["01852","Procedures vein forearm phlbrrhaphy",4,"procedures vein forearm phlbrrhaphy phleborrhaphy repair cms:anes px vn f/arm"],
  ["01860","Forearm wrist/hand cast",3,"forearm wrist hand cast application removal external fixator exfix ex-fix fix splint cms:anes wrist/hand"],
  ["01916","Diagnostic arteriography / venography",5,"angiogram angiography arteriogram venogram diagnostic ir arteriography vngrph cms:anes dx arteriography/vngrph"],
- ["01920","Cardiac catheterization (incl. coronary angiography)",7,"cath cardiac heart cardiology coronary angiogram catheterization cms:anes"],
+ ["01920","Cardiac catheterization (incl. coronary angiography)",7,"cath cardiac heart cardiology coronary angiogram catheterization pci stent angioplasty intervention cms:anes"],
  ["01922","Non-invasive imaging / radiation therapy (CT, MRI)",7,"mri ct scan imaging radiation sedation for invas radj ther cms:anes n-invas img/radj"],
  ["01924","Therapeutic IR — arterial NOS (embolization)",5,"ir interventional radiology embolization arterial angioembolization pelvic splenic ther ivntl radical artl cms:anes rad nos"],
  ["01925","Therapeutic IR — carotid / coronary",7,"ir carotid stent coronary ivntl radical artl crtd cms:anes rad crtd/c"],
@@ -864,18 +882,18 @@ const ANES_CPT      = [
  ["01938","Perc image-guided spine injection / drainage / aspiration — lumbar or sacral",4,"spine injection lumbar sacral esi epidural steroid facet pain aspir lmbr cms:anes drg/aspir lmbr/sac"],
  ["01939","Perc image-guided neurolytic destruction — cervical or thoracic",4,"neurolytic rfa radiofrequency ablation cervical thoracic pain nulyt thrc cms:anes agt crv/thrc"],
  ["01940","Perc image-guided neurolytic destruction — lumbar or sacral",4,"neurolytic rfa radiofrequency ablation lumbar sacral pain nulyt lmbr cms:anes agt lmbr/sac"],
- ["01941","Neuromd/ntrvrt crv/thrc",5,"neuromd ntrvrt thrc cms:anes neuromd/ntrvrt crv/thrc"],
- ["01942","Neuromd/ntrvrt lmbr/sac",5,"neuromd ntrvrt lmbr cms:anes neuromd/ntrvrt lmbr/sac"],
- ["01951","Burn excision / debridement — <4% TBSA",3,"burn tbsa excision graft debridement small less escharotomy dressing than 4 percent cms:anes 2&3 %"],
- ["01952","Burn excision / debridement — 4–9% TBSA",5,"burn tbsa excision graft debridement escharotomy grafting 4 to 9 percent stsg cms:anes 2&3 4-9%"],
- ["01953","Burn excision / debridement — each additional 9% TBSA (add-on)",1,"burn tbsa excision graft debridement add-on additional escharotomy grafting each 9 percent stsg large cms:anes 2&3 ea add 9%"],
+ ["01941","Neuromd/ntrvrt crv/thrc",5,"neuromd ntrvrt thrc kyphoplasty vertebroplasty spinal cord stimulator neuromodulation intravertebral percutaneous spine cervical thoracic cms:anes neuromd/ntrvrt crv/thrc"],
+ ["01942","Neuromd/ntrvrt lmbr/sac",5,"neuromd ntrvrt lmbr kyphoplasty vertebroplasty spinal cord stimulator neuromodulation intravertebral percutaneous spine lumbar sacral cms:anes neuromd/ntrvrt lmbr/sac"],
+ ["01951","Burn excision / debridement — <4% TBSA",3,"burn tbsa excision graft debridement small less escharotomy dressing than 4 percent skin stsg autograft allograft grafting tangential change cms:anes 2&3 %"],
+ ["01952","Burn excision / debridement — 4–9% TBSA",5,"burn tbsa excision graft debridement escharotomy grafting 4 to 9 percent stsg skin autograft allograft tangential dressing change cms:anes 2&3 4-9%"],
+ ["01953","Burn excision / debridement — each additional 9% TBSA (add-on)",1,"burn tbsa excision graft debridement add-on additional escharotomy grafting each 9 percent stsg large skin autograft allograft tangential dressing change cms:anes 2&3 ea add 9%"],
  ["01958","External cephalic version",5,"ecv version breech ob xtrnl cephalic cms:anes"],
  ["01960","Vaginal delivery — anesthesia only",5,"vaginal delivery svd ob general for only cms:anes"],
  ["01961","Cesarean delivery — anesthesia only",7,"csection c-section cesarean ob crash section spinal for delivery only cms:anes"],
  ["01962","Urgent hysterectomy following delivery",8,"postpartum hysterectomy hemorrhage pph ob emergency urgent cms:anes"],
  ["01963","Cesarean hysterectomy — without labor analgesia",8,"cesarean hysterectomy accreta ob cms:anes"],
- ["01965","Incompl/missed ab procedures",4,"incompl missed procedures cms:anes incompl/missed ab px"],
- ["01966","Induced abortion procedures",4,"induced abortion procedures cms:anes px"],
+ ["01965","Incompl/missed ab procedures",4,"incompl missed procedures d&e dilation evacuation cms:anes incompl/missed ab px"],
+ ["01966","Induced abortion procedures",4,"induced abortion procedures d&e dilation evacuation cms:anes px"],
  ["01967","Neuraxial labor analgesia (planned vaginal delivery)",5,"labor epidural cse ob analgesia neuraxl dlvr cms:neuraxl lbr anes vag"],
  ["01968","Cesarean delivery following neuraxial labor analgesia (add-on)",2,"csection cesarean after epidural labor to section ob add-on analg dlvr neuraxial cms:anes/analg cs"],
  ["01969","Cesarean hysterectomy following neuraxial labor analgesia (add-on)",5,"cesarean hysterectomy after epidural ob add-on hyst flwg neuraxial cms:anes c"],
@@ -1000,7 +1018,7 @@ const ICTL = ICTL_OFFICIAL.map(t=>({code:t[0], name:ICTL_TITLE[t[0]]||t[1], capt
 
 /* ══════════════════ constants ══════════════════ */
 const SCHEMA = 3;
-const APP_VERSION = "v3.6.17";
+const APP_VERSION = "v3.6.19";
 const K_MAIN = "crna_caselog_v3";
 /* Base-unit provenance is a property of the BUILD, not a user choice — the CPT
    table is embedded, so every user carries identical weights. Asking users to
@@ -1601,40 +1619,167 @@ function drawPSQC(){
 }
 
 /* ══════════════════ CPT search ══════════════════ */
+/* v3.6.19 — three ways to land on a code, shown in this rank order:
+   1. EXACT PHRASE in code / name / synonyms (c-section, ex fix removal, t-spine). Unchanged from the
+      astra-reviewed v3.6.11 matcher, so the c-section-vs-resection trap stays fixed.
+   2. The licensed ASA CROSSWALK® eFile, if THIS device holds one (xwImport below). A 5-digit surgical
+      CPT (47562) or words from a surgical descriptor hit the crosswalk; the chip carries the
+      anesthesia code and the APP'S base units — never the file's.
+   3. TOKEN match, now in both directions: every typed word must be a substring of the haystack OR
+      start with a synonym of 4+ letters. "tonsillectomy" used to miss because the synonym was
+      "tonsil" and only haystack-contains-query was tested (23 of 154 common procedure names missed,
+      2026-10-16). A single long word now goes through this path too.
+   Nothing here changes what is LOGGED: a chip still writes the code and base units from ANES_CPT,
+   and a wrong synonym only mis-ranks a chip the user can read before tapping. */
+const _norm = t => String(t||"").toLowerCase().replace(/[\-\/]+/g," ").replace(/\s+/g," ").trim();
+const _STOP = new Set(["of","the","and","with","for","a","an","in","on","to","under","vs"]);
+const _hayToks = new Map();
+function _toks(r){ let v=_hayToks.get(r); if(!v){ v=_norm(r[0]+" "+r[1]+" "+(r[3]||"")).split(" ").filter(Boolean); _hayToks.set(r,v); } return v; }
+function _tokHit(t, h, words){ return h.includes(t) || (t.length>=4 && words.some(w=>w.length>=4 && t.startsWith(w))); }
+function cptSearch(q){
+  q = String(q||"").trim().toLowerCase();
+  const nq = _norm(q); let toks = nq.split(" ").filter(Boolean);
+  if(toks.length>1) toks = toks.filter(t=>!_STOP.has(t));           /* "removal of hardware" → removal, hardware */
+  const exact=[], loose=[];
+  if(!toks.length) return {exact, loose};
+  for(const r of ANES_CPT){
+    const words=_toks(r), h=words.join(" ");
+    if(r[0].startsWith(q) || h.includes(nq)) exact.push(r);
+    else if(toks.every(t=>_tokHit(t,h,words))) loose.push(r);
+  }
+  return {exact, loose};
+}
+function chipHTML(r, via){
+  return `<button class="chip sm wide" style="justify-content:flex-start;text-align:left" data-cpt="${r[0]}" data-bu="${r[2]}" data-d="${r[1].replace(/"/g,'&quot;')}">
+    <b style="color:var(--gold);margin-right:8px">${r[0]}</b>${r[1]} <span style="color:var(--muted);margin-left:6px">${r[2]} bu</span>${via?`<span class="xwtag">${via.replace(/</g,"&lt;")}</span>`:""}</button>`;
+}
+function wireChips(box){
+  box.querySelectorAll("[data-cpt]").forEach(b=>b.onclick=()=>{
+    $("f-cpt").value=b.dataset.cpt; $("f-base").value=b.dataset.bu;
+    if(!$("f-desc").value) $("f-desc").value=b.dataset.d;
+    $("searchres").innerHTML=""; $("regionres").innerHTML=""; $("f-search").value=""; toast("CPT "+b.dataset.cpt);
+  });
+}
 $("f-search").oninput = function(){
   const q = this.value.trim().toLowerCase();
   const box = $("searchres");
   if(q.length<2){ box.innerHTML=""; return; }
-  /* Search = EXACT PHRASE first, then token AND-match, in that order.
-     Substring-only missed "exploratory laparotomy" and "pelvic fracture" because it needed the
-     typed words contiguous and in one order. But token-only broke "c-section": a bare length>1
-     filter drops the "c", leaving "section", which matches reSECTION and disSECTION and pushes
-     cesarean 01961 out of the top 8. Same for t-spine / l-spine. So: rank real phrase hits above
-     token hits and only then truncate. Hyphens and slashes normalise to spaces on both sides, so
-     "ex-fix" == "ex fix" and "c-section" == "c section". (astra review, 2026-09-11.) */
-  const norm = t => t.toLowerCase().replace(/[\-\/]+/g," ").replace(/\s+/g," ").trim();
-  const nq   = norm(q);
-  const toks = nq.split(" ").filter(Boolean);
-  const hay  = r => norm(r[0]+" "+r[1]+" "+(r[3]||""));
-  const exact = [], loose = [];
-  for(const r of ANES_CPT){
-    const h = hay(r);
-    if(r[0].startsWith(q) || h.includes(nq)) exact.push(r);
-    else if(toks.length>1 && toks.every(t => h.includes(t))) loose.push(r);
-  }
-  const hits = exact.concat(loose).slice(0,8);
-  box.innerHTML = hits.length
-    ? hits.map(r=>`<button class="chip sm wide" style="justify-content:flex-start;text-align:left"
-        data-cpt="${r[0]}" data-bu="${r[2]}" data-d="${r[1].replace(/"/g,'&quot;')}">
-        <b style="color:var(--gold);margin-right:8px">${r[0]}</b>${r[1]} <span style="color:var(--muted);margin-left:6px">${r[2]} bu</span>
-      </button>`).join("")
-    : `<p class="hint">No match. Leave CPT blank and just describe it — the case still counts.</p>`;
-  box.querySelectorAll("[data-cpt]").forEach(b=>b.onclick=()=>{
-    $("f-cpt").value=b.dataset.cpt; $("f-base").value=b.dataset.bu;
-    if(!$("f-desc").value) $("f-desc").value=b.dataset.d;
-    box.innerHTML=""; $("f-search").value=""; toast("CPT "+b.dataset.cpt);
-  });
+  const s = cptSearch(q);
+  const xw = xwSearch(q);                       /* [] unless a licensed eFile is on this device */
+  const seen = new Set(); const out=[];
+  const push=(r,via)=>{ if(seen.has(r[0])||out.length>=10) return; seen.add(r[0]); out.push(chipHTML(r,via)); };
+  s.exact.forEach(r=>push(r));
+  xw.forEach(x=>push(x.row, x.via));
+  s.loose.forEach(r=>push(r));
+  box.innerHTML = out.length ? out.join("")
+    : `<p class="hint">No match. Try <b>Browse by body region</b> below, or leave CPT blank and just describe it — the case still counts, and the words you typed are kept so the list can be fixed.</p>`;
+  wireChips(box);
 };
+
+/* ══════════════════ browse by region (v3.6.19) ══════════════════
+   The CPT anesthesia section's own anatomic subsections — public structure. Ranges are inclusive and
+   every code in ANES_CPT falls in exactly one (pinned by tests/features_v3619_test.py). */
+const CPT_REGIONS = [
+ ["Head","00100","00222"],["Neck","00300","00352"],["Thorax — chest wall & shoulder girdle","00400","00474"],
+ ["Intrathoracic","00500","00580"],["Spine & spinal cord","00600","00670"],["Upper abdomen","00700","00797"],
+ ["Lower abdomen","00800","00882"],["Perineum","00902","00952"],["Pelvis (except hip)","01112","01190"],
+ ["Upper leg (except knee)","01200","01274"],["Knee & popliteal","01320","01444"],["Lower leg","01462","01522"],
+ ["Shoulder & axilla","01610","01682"],["Upper arm & elbow","01710","01782"],["Forearm, wrist & hand","01810","01860"],
+ ["Radiological / IR / imaging","01916","01942"],["Burns","01951","01953"],["Obstetric","01958","01969"],["Other","01990","01999"]];
+function drawRegions(){
+  const box=$("regionchips"); if(!box) return;
+  box.innerHTML = CPT_REGIONS.map((g,i)=>`<button class="chip sm" type="button" data-region="${i}">${g[0]}</button>`).join("");
+  box.querySelectorAll("[data-region]").forEach(b=>b.onclick=()=>{
+    const g=CPT_REGIONS[+b.dataset.region];
+    box.querySelectorAll("[data-region]").forEach(x=>x.classList.toggle("on", x===b));
+    const rows=ANES_CPT.filter(r=>r[0]>=g[1] && r[0]<=g[2]);
+    const rb=$("regionres"); rb.innerHTML = rows.map(r=>chipHTML(r)).join(""); wireChips(rb);
+  });
+}
+drawRegions();
+
+/* ══════════════════ ASA CROSSWALK® — licensed eFile, THIS DEVICE ONLY (v3.6.19) ══════════════════
+   The public app ships with NO crosswalk data. ASA licenses CROSSWALK per user for internal use and
+   bars it from any public web system, so it cannot live in the GitHub Pages build. What CAN exist is
+   a slot: a licensed user loads their own eFile (CSV/TXT); it is parsed into localStorage on this
+   device, it is never written into the JSON backup or the CSV, and Remove wipes it. A PRIVATE build
+   (build_private.py) may bake a licensed file in as XW_EMBED for an institution's own hosting; the
+   public deploy script refuses any index.html that carries one. Base units ALWAYS come from ANES_CPT
+   (the CMS file), never from the import, so a stale eFile cannot change what is logged. */
+const K_XW = "crna_caselog_v3_asaxw";
+let XW = lsGet(K_XW, null) || (typeof XW_EMBED!=="undefined" ? XW_EMBED : null);
+function xwParse(text){
+  const lines = String(text||"").split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length) throw new Error("empty file");
+  const sample = lines.slice(0,50).join("\n");
+  const delim = [",","\t","|",";"].map(d=>[d,(sample.split(d).length-1)]).sort((a,b)=>b[1]-a[1])[0][0];
+  const split = l => { const out=[]; let cur="", inq=false;
+    for(let i=0;i<l.length;i++){ const ch=l[i];
+      if(ch==='"'){ if(inq && l[i+1]==='"'){ cur+='"'; i++; } else inq=!inq; }
+      else if(ch===delim && !inq){ out.push(cur); cur=""; }
+      else cur+=ch; }
+    out.push(cur); return out.map(x=>x.trim()); };
+  const known = new Set(ANES_CPT.map(r=>r[0]));
+  const map={}; let rows=0;
+  for(const l of lines){
+    const cells=split(l);
+    const surg=[], anes=[]; let desc="", anyText="";
+    for(const c of cells){
+      if(/^\d{5}$/.test(c)){ (/^0[01]\d{3}$/.test(c) ? anes : surg).push(c); }
+      else if(/[a-z]/i.test(c)){ if(c.length>anyText.length) anyText=c; if(!/^anes/i.test(c) && c.length>desc.length) desc=c; }
+    }
+    if(!surg.length || !anes.length) continue;              /* header, notes, blank, or not a crosswalk row */
+    const valid = anes.filter(a=>known.has(a));
+    if(!valid.length) continue;
+    const d = (desc||anyText).slice(0,70);
+    for(const sc of surg){
+      if(!map[sc]) map[sc]=[d];
+      for(const a of valid){ if(!map[sc].includes(a)) map[sc].push(a); }
+      rows++;
+    }
+  }
+  if(!rows) throw new Error("no rows with a surgical CPT and an anesthesia code (00100–01999) were found");
+  return map;
+}
+function xwSave(map, fileName){
+  const obj = {v:1, file:String(fileName||"").slice(0,60), imported:new Date().toISOString(), rows:Object.keys(map).length, map};
+  if(!lsSet(K_XW,obj)) throw new Error("this phone's storage refused the file (too large). Keep only the code / description / anesthesia-code columns and retry.");
+  XW = obj;
+}
+function xwRemove(){ try{ localStorage.removeItem(K_XW); }catch(e){} XW = (typeof XW_EMBED!=="undefined") ? XW_EMBED : null; drawXW(); toast(XW ? "Imported copy removed — this private build still carries its own" : "Crosswalk removed from this device"); }
+function xwSearch(q){
+  if(!XW || !XW.map) return [];
+  const out=[]; const seen=new Set();
+  const add=(anes, surg, desc)=>{ const row=ANES_CPT.find(r=>r[0]===anes); if(!row||seen.has(anes)) return; seen.add(anes);
+    out.push({row, via:"Crosswalk · "+surg+(desc?" "+String(desc).slice(0,40):"")}); };
+  const nq=_norm(q);
+  if(/^\d{5}$/.test(nq)){ if(/^0[01]/.test(nq)) return out; const e=XW.map[nq]; if(e) e.slice(1).forEach(a=>add(a,nq,e[0])); return out; }
+  if(/^\d{2,4}$/.test(nq)){ for(const sc in XW.map){ if(sc.startsWith(nq)){ const e=XW.map[sc]; add(e[1],sc,e[0]); if(out.length>=6) break; } } return out; }
+  const toks=nq.split(" ").filter(Boolean); if(!toks.length) return out;
+  for(const sc in XW.map){
+    const e=XW.map[sc]; const d=_norm(e[0]); if(!d) continue;
+    if(toks.every(t=>_tokHit(t,d,d.split(" ")))){ add(e[1], sc, e[0]); if(out.length>=6) break; }
+  }
+  return out;
+}
+function drawXW(){
+  const st=$("xwstatus"); if(!st) return;
+  const emb = (typeof XW_EMBED!=="undefined") && XW===XW_EMBED;
+  if(XW){ st.innerHTML = (emb ? "<b>Embedded in this private build</b> (licensed): " : "<b>Loaded:</b> ")+XW.rows+" surgical codes"+
+      (XW.file ? " from <i>"+String(XW.file).replace(/</g,"&lt;")+"</i>" : "")+" · "+String(XW.imported||"").slice(0,10)+". Your license, your device.";
+    $("btn-xw-rm").classList.toggle("hide", emb); $("btn-xw").textContent="⬆ Replace with a newer eFile"; }
+  else { st.innerHTML="No crosswalk on this device. The search works without it — this only adds surgical-code lookup."; $("btn-xw-rm").classList.add("hide"); $("btn-xw").textContent="⬆ Import my licensed eFile"; }
+}
+$("btn-xw").onclick = ()=>$("xwfile").click();
+$("btn-xw-rm").onclick = ()=>{ if(confirm("Remove the ASA Crosswalk from this device?")) xwRemove(); };
+$("xwfile").onchange = function(){
+  const f=this.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{ try{ const map=xwParse(String(rd.result)); xwSave(map,f.name); drawXW(); toast("Crosswalk loaded — "+XW.rows+" surgical codes, this device only"); }
+                 catch(e){ toast("Not imported: "+e.message); } this.value=""; };
+  rd.readAsText(f);
+};
+drawXW();
 
 /* ══════════════════ save paths ══════════════════ */
 function baseRecord(kind){
@@ -1700,6 +1845,8 @@ function fullSave(){
   r.cpt = $("f-cpt").value.trim();
   r.baseUnits = bv ? Number(bv) : null;
   r.description = $("f-desc").value.trim();
+  /* v3.6.19 — a search that found nothing is data: keep the words so the code list can be fixed. */
+  (function(){ const sq=$("f-search").value.trim(); r.cptQuery = (!r.cpt && sq) ? sq.slice(0,80) : null; })();
   r.asaPS = PS? +PS : null;
   r.qc = Object.keys(QC).filter(k=>QC[k]);
   r.autonomy = Object.assign({},AUT);
@@ -2192,7 +2339,7 @@ function exportJSON(){
 }
 function exportCSV(){
   const cols = ["id","schemaVersion","kind","stub","date","savedAt","completedAt","editedAt","restoredFromId","activityType","siteId","siteName",
-    "loggerId","loggerKey","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description",
+    "loggerId","loggerKey","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description","cptQuery",
     "asaPS","qc","acuity","indication","mechanism","opStage","hemorrhage","directedProducts","attendReason","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
     "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet","loggerFte","role","success","unrecoverable","codebook"];
   const esc = ExportContract.csv;
@@ -2280,6 +2427,7 @@ $("file").onchange = function(){
           if(!["PERFORMED","ASSISTED","OBSERVED"].includes(r.role)) r.role = "PERFORMED";
           r.success = (r.success===false) ? false : true; }
         if(typeof r.codebook!=="string") r.codebook = null;
+        r.cptQuery = (typeof r.cptQuery==="string" && r.cptQuery.trim()) ? r.cptQuery.trim().slice(0,80) : null;
         return r;
       };
       const bad = rows.filter(r=>!valid(r));
@@ -2593,6 +2741,7 @@ function editRecord(id){
   $("f-mins").value=e.minutes!=null?e.minutes:"";
   if($("f-site")) $("f-site").value = (e.siteOverride && e.siteId)? e.siteId : "";
   $("f-desc").value=e.description||"";
+  $("f-search").value=e.cptQuery||"";
   PS = e.asaPS? String(e.asaPS) : null;
   IND = e.indication || null; MECH = e.mechanism || null; STAGE = e.opStage || null; HEM = e.hemorrhage || null; HEMDIR = !!e.directedProducts; ATTEND = e.attendReason || null;
   QC = {}; (e.qc||[]).forEach(q=>QC[q]=true);
