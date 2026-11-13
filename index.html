@@ -263,7 +263,8 @@ details.sub[open]>summary{margin-bottom:10px}
 <details><summary>Quick Log or the full record?</summary><div class="ans"><b>Quick Log, every time.</b> It takes about five seconds and <b>the case is counted the moment you tap it</b>. Add the detail later from the Unfinished tab, which badges itself with how many are waiting. A stub you never finish still counts the case; a case you never logged is gone.</div></details>
 <details><summary>I forgot to log yesterday. Can I still enter it?</summary><div class="ans">Yes. Open <b>Full record now</b> and set the Date field. The date <b>sticks</b> for a run of entries, so you can do a whole day in one sitting. Quick Log always stamps today on purpose, so it can never inherit a backdate by accident.</div></details>
 <details><summary>Do I have to fill in autonomy? What if I am not sure?</summary><div class="ans"><b>Leave it blank.</b> A blank is honest data. A guess moves the average and there is no way to tell afterwards which numbers were real. This is especially true if you are entering an old case from memory — <b>blank beats guessed, every time.</b></div></details><details><summary>What counts as a crisis?</summary><div class="ans"><b>Crisis</b> = an unplanned event in this phase that needed immediate intervention to prevent death or major harm — arrest, massive hemorrhage, cannot-intubate/cannot-oxygenate, anaphylaxis, malignant hyperthermia, LAST, a reperfusion potassium event. <b>Not a crisis:</b> a difficult airway fixed on the next attempt, a pressor bolus for transient hypotension, bronchospasm or laryngospasm that answered first-line treatment. If none of that happened, tap <b>NA</b> on the Crisis row — never 0. A 0 says an attending directed you through a real crisis, which is a real observation about a real event. The codebook version stamped on each record shows which definition it was scored under.</div></details><details><summary>Initial operation, or a return to the OR?</summary><div class="ans">Shown only when the indication is trauma or burn. <b>Initial</b> = the first operation for this injury. <b>Planned staged return</b> = a return that was intended at the end of the last operation — second look, pack removal, definitive repair after damage control, staged burn grafting. <b>Unplanned return</b> = bleeding, missed injury, compartment syndrome, leak. <b>Planned versus unplanned is decided by what the previous operation’s plan said, not by how urgent this one felt.</b> A staged return is not lesser trauma — it is damage-control doctrine — but it is a different exposure, and the workbook reports the two apart. Not sure? Leave it blank.</div></details>
-<details><summary>What counts as a no-case day?</summary><div class="ans">Five different things, and the app keeps them apart on purpose:<ul><li><b>Clinical — no qualifying cases</b> and <b>Float / relief</b> — you were at the bedside and available, and nothing came. <b>These are the ones that matter.</b></li><li><b>Admin</b> and <b>Training / FTX / TDY</b> — duty days away from the bedside. Recorded, but counted separately.</li><li><b>Leave / pass</b> — excluded from every denominator, so logging it costs you nothing.</li></ul>A day with no cases is a <b>record</b>. A day you never opened the app is a <b>hole</b>.</div></details>
+<details><summary>What counts as a no-case day?</summary><div class="ans">Seven different things, and the app keeps them apart on purpose:<ul><li><b>Clinical — no qualifying cases</b>, <b>Float / relief</b> and <b>Quiet call</b> — you were at the bedside or on call and available, and nothing came. <b>These are the ones that matter.</b> A night call goes on the date the shift started.</li><li><b>Admin</b> and <b>Training / FTX / TDY</b> — duty days away from the bedside. Recorded, but counted separately.</li><li><b>Leave / pass</b> and <b>Non-duty day</b> — you were not working. Excluded from every denominator, so logging them costs you nothing.</li></ul>A day with no cases is a <b>record</b>. A day you never opened the app is a <b>hole</b>.</div></details>
+<details><summary>The app is asking about days I did not log.</summary><div class="ans">Weekdays in the last two weeks with <b>nothing</b> logged show up under <b>Unfinished</b>. One tap per day: non-duty, leave, admin, training, quiet call, float, or clinical with no case. Weekends are never asked about. Answer them and they disappear; a day you do not answer simply stays a hole.</div></details>
 <details><summary>What is a missed opportunity? Am I reporting on someone?</summary><div class="ans"><span class='no'>No.</span> It records a case you were eligible for that went elsewhere, and what the reason was — scheduling, turnover, trainee priority, privileges not in place. <b>It captures facts, not motives</b>, and there is no field for blame. It exists because a case that walks past you is invisible to every other dataset in the Army.</div></details>
 <details><summary>I am covering at a different hospital today.</summary><div class="ans">Open the full record and use <b>Site for THIS case only</b>, inside “Backfilling a case from a different site?”. Your configured site stays the default for everything else.</div></details>
 <details><summary>Why does ICTL have its own tab?</summary><div class="ans">Because ICTL tasks happen <b>without</b> a case — a line on the ward, a sim, a class you taught. The ICTL tab keeps its own tally so those never depend on whether an OR case happened that day.</div></details>
@@ -321,6 +322,11 @@ details.sub[open]>summary{margin-bottom:10px}
       <div class="chips" id="regionchips"></div>
       <div class="chips" id="regionres" style="margin-top:8px"></div>
     </details>
+    <div id="burn-wrap" style="display:none;margin-top:10px">
+      <label>Burn — % TBSA excised / grafted / debrided <b>this operation</b></label>
+      <div class="chips" id="burn-row" style="margin-top:6px"></div>
+      <p class="hint">One tap sets the code and the base units, add-on included. Area <b>operated on today</b>, not the patient’s total burn. A best estimate is fine.</p>
+    </div>
     <div class="row" style="margin-top:10px">
       <div><label>CPT</label><input id="f-cpt" inputmode="numeric" placeholder="optional"></div>
       <div><label>Base units</label><input id="f-base" inputmode="decimal" placeholder="—"></div>
@@ -341,10 +347,16 @@ details.sub[open]>summary{margin-bottom:10px}
       <div id="trainee-block" style="margin-top:10px">
         <label>Trainee in the room?</label>
         <div class="chips" id="trainee-row" style="margin-top:6px"></div>
+        <style>.chip.tk{border-color:var(--warn);color:var(--warn)}</style>
+        <div id="drove-wrap" style="display:none;margin-top:8px">
+          <label>Who drove the anesthetic?</label>
+          <div class="chips" id="drove-row" style="margin-top:6px"></div>
+          <p class="hint">Supervising is still driving: if you made the decisions and the trainee executed, that is <b>I drove it</b>.</p>
+        </div>
         <div id="proctr-wrap" style="display:none;margin-top:8px">
-          <label>Which did the TRAINEE do, under your supervision?</label>
+          <label>Who had hands on each procedure? (tap to cycle)</label>
           <div class="chips" id="proctr" style="margin-top:6px"></div>
-          <p class="hint">Tap only what the trainee did. Untapped = you did it. Trainee items never count toward your ICTL tally.</p>
+          <p class="hint">Plain = <b>you did it</b> · ✓ = <b>trainee did it, you supervised</b> (their rep, not yours) · ↩ = <b>trainee started, you took over</b> (your rep). Only your own and taken-over items count toward your ICTL tally.</p>
         </div>
       </div>
     </div>
@@ -406,16 +418,21 @@ details.sub[open]>summary{margin-bottom:10px}
 
   <button class="bigbtn ghost sm" id="btn-zero" style="margin-top:6px">🌑 No qualifying cases today — what was the day?</button>
   <div class="card hide" id="zero-form" style="margin-top:8px">
-    <p class="hint" style="margin-top:0"><b>A day with no cases is data only if the reason is captured.</b> The first two are
-    clinical days (you were at the bedside, the cases were not there). The rest are Army time away from the bedside —
+    <p class="hint" style="margin-top:0"><b>A day with no cases is data only if the reason is captured.</b> The first three are
+    clinical days (you were at the bedside or on call, the cases were not there). The rest are Army time away from the bedside —
     the denominator the force cannot see today.</p>
     <div class="chips" id="zero-types">
       <button class="chip sm" data-daytype="CLIN">Clinical — no qualifying cases</button>
       <button class="chip sm" data-daytype="FLOAT">Float / relief / giving breaks</button>
+      <button class="chip sm" data-daytype="CALLQ">Quiet call — on call, no cases</button>
       <button class="chip sm" data-daytype="ADMIN">Admin / additional duty</button>
       <button class="chip sm" data-daytype="TRAIN">Training · FTX · TDY · school</button>
       <button class="chip sm" data-daytype="LEAVE">Leave / pass</button>
+      <button class="chip sm" data-daytype="OFF">Non-duty day</button>
     </div>
+    <label style="margin-top:10px">Also today (optional) — Scope-of-Practice work that is not a case</label>
+    <div class="chips" id="zero-contrib" style="margin-top:6px"></div>
+    <p class="hint">Tap any that apply, then the day type above. On a day with cases, log these under <b>Admin / additional duty</b>.</p>
     <button class="bigbtn ghost sm" id="btn-zero-cancel" style="margin-top:8px">Cancel</button>
   </div>
   <button class="bigbtn ghost sm" id="btn-missed" style="margin-top:8px">⚠ Log a missed opportunity</button>
@@ -468,6 +485,15 @@ details.sub[open]>summary{margin-bottom:10px}
   <h2 style="margin:4px 0 10px">Unfinished</h2>
   <p class="hint" style="margin-bottom:14px">Quick logs waiting for detail. Nothing here is lost — a stub still counts the case.</p>
   <div class="card" id="todolist"></div>
+  <div class="card hide" id="gapcard" style="margin-top:14px">
+    <b>Days with nothing logged</b>
+    <p class="hint" style="margin:4px 0 10px">Weekdays in the last two weeks. One tap says what the day was — an answer is data, a blank is a hole.</p>
+    <div id="gaplist"></div>
+    <div class="chips" style="margin-top:10px">
+      <button class="chip sm" id="gap-all-off">All remaining → Non-duty</button>
+      <button class="chip sm" id="gap-all-leave">All remaining → Leave</button>
+    </div>
+  </div>
 </section>
 
 <!-- ═══════════════ ICTL ═══════════════ -->
@@ -941,7 +967,7 @@ const PROCS = {
   ["AW_DIFFICULT","Airway — unanticipated difficult"],["AW_EXCHANGE","Airway — tube exchange"],
   ["AW_DLT","Airway — lung isolation (DLT / bronchial blocker)"],
   ["TECH_VOLATILE","Technique — volatile GA"],["TECH_TIVA","Technique — TIVA"],
-  ["TECH_DRAWOVER","Technique — drawover vaporizer"],
+  ["TECH_DRAWOVER","Technique — drawover vaporizer"],["TECH_O2_CONC","Technique — oxygen concentrator source"],
   ["TECH_KETAMINE","Technique — ketamine-based"],["TECH_MAC","Technique — MAC / sedation"],
   ["TECH_NEURAXIAL","Technique — neuraxial primary"],["TECH_REGIONAL","Technique — block primary"],
   ["RESUS_MTP","Resus — MTP this case"],["RESUS_BLOOD","Resus — blood products given"],
@@ -949,11 +975,16 @@ const PROCS = {
   ["WBB_MANAGED","Resus — walking blood bank: ran it"],
   ["WBB_ASSIST","Resus — walking blood bank: assisted"],
   ["FWB_COLLECT","Resus — fresh whole blood: collected donor units"],
-  ["RESUS_TXA","Resus — TXA"],
+  ["RESUS_TXA","Resus — TXA"],["RESUS_WARMING","Resus — active warming / hypothermia prevention"],
+  ["RESUS_VISCO","Resus — TEG / ROTEM run + interpreted"],["RESUS_ISTAT","Resus — i-STAT / POC labs run + interpreted"],["RESUS_HEMOSTATIC","Resus — hemostatic agent"],
+  ["PAIN_MULTIMODAL","Pain — non-block acute pain management (ketamine, multimodal)"],
   ["CRISIS_ARREST","Crisis — intraop arrest / ACLS"],["CRISIS_HEMORRHAGE","Crisis — massive hemorrhage"],
   ["PT_PEDS","Patient — pediatric (<12 y)"],["PT_INFANT","Patient — infant (<1 y)"],
-  ["PT_BURN","Patient — major burn"],
-  ["OB_PPH","Obstetric — postpartum hemorrhage"],["OB_GA_CS","Obstetric — GA for cesarean"]],
+  ["PT_BURN","Patient — major burn"],["PT_TBI","Patient — severe TBI / ICP management"],
+  ["PT_HELD72","Patient — held > 72 h before evacuation"],["PT_MWD","Patient — military working dog"],
+  ["OB_PPH","Obstetric — postpartum hemorrhage"],["OB_GA_CS","Obstetric — GA for cesarean"],
+  ["EVAC_PREP","Evacuation — prepared patient / handoff for MEDEVAC"],["EVAC_ESCORT","Evacuation — escorted / en-route care"],
+  ["ENV_CBRNE","Environment — CBRNE"],["ENV_UXO","Environment — unexploded ordnance on patient"]],
  REGIONAL: [
   ["GUID_US","US-guided"],["GUID_LM","Landmark / nerve stimulator"],
   ["SINGLE_SHOT","Single-shot"],["CONT_CATH","Continuous catheter"],
@@ -986,7 +1017,10 @@ const PROCS = {
   ["WBB_MANAGED","Walking blood bank — ran it"],["WBB_ASSIST","Walking blood bank — assisted"],
   ["FWB_COLLECT","Fresh whole blood — collected donor units"],
   ["REBOA_ASSIST","REBOA — assist / monitor"],
-  ["THORACOTOMY_A","Resuscitative thoracotomy — assist"],["TRIAGE","Multi-casualty triage"]],
+  ["THORACOTOMY_A","Resuscitative thoracotomy — assist"],["TRIAGE","Multi-casualty triage"],
+  ["TOURNIQUET","Tourniquet — applied / converted / removed"],["RESUS_WARMING","Resus — active warming / hypothermia prevention"],
+  ["RESUS_VISCO","Resus — TEG / ROTEM run + interpreted"],["RESUS_ISTAT","Resus — i-STAT / POC labs run + interpreted"],["PT_TBI","Patient — severe TBI / ICP management"],
+  ["EVAC_PREP","Evacuation — prepared patient / handoff for MEDEVAC"]],
  ICU: [
   ["ROUNDED","Rounded / presented on the patient"],["VENT","Ventilator management"],["SEDATION","Sedation / analgesia titration"],
   ["PRESSORS","Vasopressor / inotrope titration"],["ICU_INTUB","Intubation in ICU"],
@@ -995,9 +1029,10 @@ const PROCS = {
   ["BRONCH","Bronchoscopy"],["CRRT","CRRT management"],
   ["BLOOD","Blood product administration"],["MTP_PRIMARY","MTP — primary provider"],
   ["MTP_SUPPORT","MTP — support role"],["ICU_POCUS","ICU ultrasound (heart/lung/IVC)"],
-  ["CC_TRANSPORT","Critical care transport"],
+  ["CC_TRANSPORT","Critical care transport"],["EVAC_PREP","Evacuation — prepared patient / handoff for MEDEVAC"],
+  ["EVAC_ESCORT","Evacuation — escorted / en-route care"],["PT_HELD72","Patient — held > 72 h before evacuation"],
     ["PT_SHOCK_H","Patient — haemorrhagic shock"],["PT_SHOCK_C","Patient — cardiogenic / obstructive shock"],["PT_SEPSIS","Patient — septic shock"],
-    ["PT_ARDS","Patient — ARDS / severe hypoxaemia"],["PT_TBI","Patient — severe TBI / ICP management"],["PT_ECMO","Patient — ECMO"],["PT_BURN_ICU","Patient — major burn"],["PT_PROLONGED","Patient — prolonged hold (> 24 h before definitive care)"]]
+    ["PT_ARDS","Patient — ARDS / severe hypoxaemia"],["PT_TBI","Patient — severe TBI / ICP management"],["PT_ECMO","Patient — ECMO"],["RESUS_VISCO","Resus — TEG / ROTEM run + interpreted"],["RESUS_ISTAT","Resus — i-STAT / POC labs run + interpreted"],["PT_BURN_ICU","Patient — major burn"],["PT_PROLONGED","Patient — prolonged hold (> 24 h before definitive care)"]]
 };
 /* proc id -> official 66F ICTL task it evidences */
 const PROC_ICTL = {
@@ -1034,7 +1069,7 @@ const ICTL = ICTL_OFFICIAL.map(t=>({code:t[0], name:ICTL_TITLE[t[0]]||t[1], capt
 
 /* ══════════════════ constants ══════════════════ */
 const SCHEMA = 3;
-const APP_VERSION = "v3.6.20";
+const APP_VERSION = "v3.6.22";
 const K_MAIN = "crna_caselog_v3";
 /* Base-unit provenance is a property of the BUILD, not a user choice — the CPT
    table is embedded, so every user carries identical weights. Asking users to
@@ -1078,6 +1113,121 @@ const TRAINEE_LABEL = Object.fromEntries(TRAINEES.map(t=>[t[0],t[1]]));
 const PROV_TYPES = [["ARMY","Army CRNA (66F)"],["USAF","Air Force CRNA"],["NAVY","Navy CRNA"],
   ["GS","Civilian CRNA — GS"],["CONTRACT","Civilian CRNA — contractor"],["OTHER_PT","Other"]];
 const EXP_BANDS = [["NEW","< 2 years (new graduate)"],["MID","2–5 years"],["SENIOR","> 5 years"]];
+/* v3.6.21 — Anesthesia Expeditionary Scope of Practice (OEMAP, DHA Strategic Partnership Education
+   Committee, Feb 2024 draft; final status unverified). The 16 "sole anesthesia provider" capabilities
+   + 3 "with consultation". Text = the document's wording. A record EVIDENCES a capability; it never
+   demonstrates competence — the ESP itself says "no valid assessment … exists". */
+const ESP_CAPS = [
+ ["ESP_SETUP","OR / trauma-bay setup","Optimize the setup of the OR and trauma bay"],
+ ["ESP_TEAM","Trauma team integration","Integrate unique skill set into trauma team"],
+ ["ESP_RESOURCES","Resources incl. whole blood","Contribute to the management of available resuscitative and operative resources to include whole blood administration"],
+ ["ESP_CPG","Apply JTS CPGs","Apply current JTS Clinical Practice Guidelines while utilizing sound clinical judgement"],
+ ["ESP_AIRWAY","Airway incl. emergent","Evaluate and manage an airway to include establishment of an emergent airway"],
+ ["ESP_RESUS","Perioperative resuscitation","Identify indications for and manage all aspects of perioperative resuscitation"],
+ ["ESP_PAIN","Acute pain management","Provide acute pain management"],
+ ["ESP_PLAN","Anesthetic plan","Develop and execute an anesthetic plan"],
+ ["ESP_ACCESS","Vascular access / invasive monitoring","Identify indications for and the establishment of vascular access and invasive hemodynamic monitoring"],
+ ["ESP_EXPED","Expeditionary anesthesia","Provide anesthetic management in expeditionary environments"],
+ ["ESP_EVAC","Evacuation decisions","Identify indications, contraindications, and process for evacuation"],
+ ["ESP_TRANSPORT","Transport of the critically ill","Identify and mitigate common problems and pitfalls associated with the transport of critically ill patients"],
+ ["ESP_DOCUMENT","Documentation / PI-QI","Document and communicate the care and interventions administered including opportunities for PI/QI"],
+ ["ESP_MASCAL","MASCAL plan","Contribute to development of a MASCAL plan"],
+ ["ESP_TBI","Non-operative head injury","Provide non-operative management of head injury"],
+ ["ESP_PEDS","Pediatric anesthesia","Provide pediatric anesthesia management"],
+ ["ESP_MWD","(consult) Military working dog","Provide anesthesia for the military working dog"],
+ ["ESP_CBRNE","(consult) CBRNE environment","Provide anesthetic care in a CBRNE environment"],
+ ["ESP_UXO","(consult) Patient with UXO","Provide anesthetic care for the patient with UXO"]
+];
+const ESP_SOLE = ESP_CAPS.slice(0,16).map(c=>c[0]);
+const ESP_LABEL = Object.fromEntries(ESP_CAPS.map(c=>[c[0],c[1]]));
+/* descriptor id -> ESP capability id(s) it evidences (a trainee-performed item never evidences the CRNA) */
+const PROC_ESP = {
+  AW_DL:["ESP_AIRWAY"], AW_VL:["ESP_AIRWAY"], AW_FOI:["ESP_AIRWAY"], AW_AWAKE:["ESP_AIRWAY"], AW_RSI:["ESP_AIRWAY"],
+  AW_SGA:["ESP_AIRWAY"], AW_DIFFICULT:["ESP_AIRWAY"], AW_EXCHANGE:["ESP_AIRWAY"], AW_DLT:["ESP_AIRWAY"],
+  RSI:["ESP_AIRWAY"], CRIC:["ESP_AIRWAY"], ICU_INTUB:["ESP_AIRWAY"], DIFF_AIRWAY:["ESP_AIRWAY"], AIRWAY_US:["ESP_AIRWAY"],
+  TECH_VOLATILE:["ESP_PLAN"], TECH_TIVA:["ESP_PLAN"], TECH_KETAMINE:["ESP_PLAN"], TECH_MAC:["ESP_PLAN"],
+  TECH_NEURAXIAL:["ESP_PLAN"], TECH_REGIONAL:["ESP_PLAN"], TECH_DRAWOVER:["ESP_PLAN","ESP_EXPED"], TECH_O2_CONC:["ESP_EXPED"],
+  RESUS_MTP:["ESP_RESUS"], RESUS_BLOOD:["ESP_RESUS"], RESUS_WHOLE:["ESP_RESUS","ESP_RESOURCES"], RESUS_CELLSAVER:["ESP_RESUS"],
+  RESUS_TXA:["ESP_RESUS"], RESUS_WARMING:["ESP_RESUS"], RESUS_VISCO:["ESP_RESUS"], RESUS_ISTAT:["ESP_RESUS"], RESUS_HEMOSTATIC:["ESP_RESUS"],
+  WBB_MANAGED:["ESP_RESOURCES"], WBB_ASSIST:["ESP_RESOURCES"], FWB_COLLECT:["ESP_RESOURCES"],
+  MTP_PRIMARY:["ESP_RESUS"], MTP_SUPPORT:["ESP_RESUS"], BLOOD:["ESP_RESUS"], PRESSORS:["ESP_RESUS"],
+  CRISIS_ARREST:["ESP_RESUS"], CRISIS_HEMORRHAGE:["ESP_RESUS"], PT_SHOCK_H:["ESP_RESUS"], PT_SHOCK_C:["ESP_RESUS"], PT_SEPSIS:["ESP_RESUS"],
+  NEEDLE_D:["ESP_RESUS"], THORACOSTOMY:["ESP_RESUS"], TOURNIQUET:["ESP_RESUS"],
+  PT_PEDS:["ESP_PEDS"], PT_INFANT:["ESP_PEDS"],
+  GUID_US:["ESP_PAIN"], GUID_LM:["ESP_PAIN"], SINGLE_SHOT:["ESP_PAIN"], CONT_CATH:["ESP_PAIN"], PAIN_MULTIMODAL:["ESP_PAIN"],
+  BLK_INTERSCALENE:["ESP_PAIN"], BLK_SUPRACLAV:["ESP_PAIN"], BLK_INFRACLAV:["ESP_PAIN"], BLK_AXILLARY:["ESP_PAIN"],
+  BLK_ESP:["ESP_PAIN"], BLK_SERRATUS:["ESP_PAIN"], BLK_PARAVERT:["ESP_PAIN"], BLK_INTERCOSTAL:["ESP_PAIN"], BLK_PECS:["ESP_PAIN"],
+  BLK_TAP:["ESP_PAIN"], BLK_RECTUS:["ESP_PAIN"], BLK_QL:["ESP_PAIN"], BLK_FEMORAL:["ESP_PAIN"], BLK_FASCIA_ILIACA:["ESP_PAIN"],
+  BLK_ADDUCTOR:["ESP_PAIN"], BLK_POPLITEAL:["ESP_PAIN"], BLK_SCIATIC:["ESP_PAIN"], BLK_LUMBAR_PLEXUS:["ESP_PAIN"], BLK_SPINAL:["ESP_PAIN"],
+  BLK_EPIDURAL_L:["ESP_PAIN"], BLK_EPIDURAL_T:["ESP_PAIN"], BLK_CAUDAL:["ESP_PAIN"], BLK_OTHER:["ESP_PAIN"],
+  CVL_US:["ESP_ACCESS"], CVL_LM:["ESP_ACCESS"], ALINE:["ESP_ACCESS"], IO:["ESP_ACCESS"], RIC:["ESP_ACCESS","ESP_RESUS"], VASC_US:["ESP_ACCESS"],
+  ATLS_PRIMARY:["ESP_TEAM"], ATLS_AIRWAY:["ESP_TEAM","ESP_AIRWAY"], ATLS_SECONDARY:["ESP_TEAM"], PRIMARY_SURVEY:["ESP_TEAM"],
+  TRIAGE:["ESP_MASCAL"],
+  EVAC_PREP:["ESP_EVAC"], EVAC_ESCORT:["ESP_EVAC","ESP_TRANSPORT"], CC_TRANSPORT:["ESP_TRANSPORT"],
+  PT_TBI:["ESP_TBI"],
+  EFAST:["ESP_RESUS"], FAST:["ESP_RESUS"], RUSH:["ESP_RESUS"], FOCUS:["ESP_RESUS"], IVC:["ESP_RESUS"], LUNG_US:["ESP_RESUS"], ICU_POCUS:["ESP_RESUS"], OB_PPH:["ESP_RESUS"],
+  PT_MWD:["ESP_MWD"], ENV_CBRNE:["ESP_CBRNE"], ENV_UXO:["ESP_UXO"]
+};
+/* official ICTL task code -> ESP capability */
+const ICTL_ESP = {
+  "081-000-2552":["ESP_ACCESS"], "081-000-2553":["ESP_ACCESS"], "081-000-2555":["ESP_ACCESS"],
+  "081-000-2556":["ESP_AIRWAY"], "081-000-2558":["ESP_RESUS"], "081-000-2684":["ESP_MASCAL"],
+  "081-66F-2000":["ESP_EXPED"], "081-66F-2001":["ESP_EXPED"], "081-66F-2002":["ESP_EXPED"], "081-66F-2003":["ESP_ACCESS","ESP_RESUS"]
+};
+/* non-case contributions, logged on a day record (v3.6.21) */
+const CONTRIBS = [
+  ["MASCAL_PLAN","Contributed to a MASCAL plan or rehearsal"],
+  ["PIQI","PI / QI — M&M, case review, process fix"],
+  ["SETUP","Set up or reconfigured an OR / trauma bay"],
+  ["CPG_REVIEW","Reviewed or applied a JTS CPG / SOP"],
+  ["EVAC_PLAN","Planned an evacuation / patient movement"]
+];
+const CONTRIB_LABEL = Object.fromEntries(CONTRIBS.map(c=>[c[0],c[1]]));
+const CONTRIB_ESP = { MASCAL_PLAN:["ESP_MASCAL"], PIQI:["ESP_DOCUMENT"], SETUP:["ESP_SETUP"], CPG_REVIEW:["ESP_CPG"], EVAC_PLAN:["ESP_EVAC"] };
+/* one rule, shared with the dashboard (02_core.js espOf) — change both or neither */
+function espOf(r){
+  const out = new Set();
+  if(r.kind==="case" && !r.stub){
+    const tr = new Set(r.procsTrainee||[]);
+    (r.procs||[]).forEach(p=>{ if(tr.has(p)) return; (PROC_ESP[p]||[]).forEach(c=>out.add(c)); });
+    if((r.activityType||"OR")==="OR" && r.cpt) out.add("ESP_PLAN");
+    if(r.siteType==="DEPLOYED") out.add("ESP_EXPED");
+  } else if(r.kind==="ictl" && !r.simulated && (!r.role || r.role==="PERFORMED")){
+    const t = (typeof r.taskIndex==="number" && ICTL[r.taskIndex]) || ICTL.find(x=>x.name===r.task);
+    (t && ICTL_ESP[t.code] || []).forEach(c=>out.add(c));
+  } else if(r.kind==="zero"){
+    (r.dayContrib||[]).forEach(k=>(CONTRIB_ESP[k]||[]).forEach(c=>out.add(c)));
+  }
+  return Array.from(out);
+}
+/* who ran the anesthetic when a trainee was present */
+const DROVE = [["MINE","I drove it — trainee executed"],["SHARED","Shared"],["TRAINEE","Trainee drove — I was backup"]];
+const DROVE_LABEL = Object.fromEntries(DROVE.map(d=>[d[0],d[1]]));
+/* v3.6.21 — burn TBSA tiers. The tiers ARE the code steps (01951 <4% · 01952 4–9% · 01953 +1 unit per
+   additional 9% or part thereof), so one tap gives the code, the add-on count and the base units.
+   [id, label, primary code, number of 01953 add-ons]. T55 is a floor: 55% or more is counted as 55–63%. */
+const BURN_TIERS = [["T0_3","< 4%","01951",0],["T4_9","4–9%","01952",0],["T10_18","10–18%","01952",1],["T19_27","19–27%","01952",2],
+  ["T28_36","28–36%","01952",3],["T37_45","37–45%","01952",4],["T46_54","46–54%","01952",5],["T55","55% +","01952",6]];
+const BURN_TIER = Object.fromEntries(BURN_TIERS.map(t=>[t[0],t]));
+const BURN_CODES = new Set(["01951","01952","01953"]);
+let BURNT = null;            /* selected BURN_TIERS id */
+function burnBase(t){ const row = ANES_CPT.find(r=>r[0]===t[2]), add = ANES_CPT.find(r=>r[0]==="01953"); return row[2] + t[3]*add[2]; }
+function drawBurn(){
+  const w = $("burn-wrap"); if(!w) return;
+  const show = ACT==="OR" && (IND==="BURN" || BURN_CODES.has($("f-cpt").value.trim()) || !!BURNT);
+  w.style.display = show ? "" : "none"; if(!show) return;
+  $("burn-row").innerHTML = BURN_TIERS.map(t=>`<button class="chip sm${BURNT===t[0]?" on":""}" data-burn="${t[0]}">${escH(t[1])} <span style="color:var(--muted);margin-left:6px">${burnBase(t)} bu</span></button>`).join("");
+  $("burn-row").querySelectorAll("[data-burn]").forEach(b=>b.onclick=()=>{
+    const off = BURNT===b.dataset.burn; BURNT = off ? null : b.dataset.burn;
+    const c2 = $("f-cpt2").value.split(",").map(x=>x.trim()).filter(x=>x && x!=="01953");
+    if(off){ if(BURN_CODES.has($("f-cpt").value.trim())){ $("f-cpt").value=""; $("f-base").value=""; } }
+    else { const t = BURN_TIER[BURNT]; $("f-cpt").value = t[2]; $("f-base").value = burnBase(t); if(t[3]) c2.push("01953");
+      if(!$("f-desc").value || /^Burn excision \/ debridement/.test($("f-desc").value)) $("f-desc").value = "Burn excision / debridement — "+t[1]+" TBSA";
+      toast("CPT "+t[2]+(t[3]? " + 01953 × "+t[3] : "")+" · "+burnBase(t)+" bu"); }
+    $("f-cpt2").value = c2.join(", ");
+    drawBurn();
+  });
+}
 /* Blunt trauma by MECHANISM: an 85-year-old's fall from standing is "trauma \u2014 blunt" and would
    otherwise inflate the high-energy share that a wartime-relevance argument rests on. */
 const MECHANISM = [["HIGH","High-energy (MVC, fall from height, blast, crush)"],["LOW","Low-energy (fall from standing, sport, ground level)"]];
@@ -1155,12 +1305,19 @@ const QC_OPTS = [["99140","Emergency +2"],["99100","Age <1 or >70 +1"],
 const MISS_REASONS = {ACT:"Assignment / ACT model",RESI:"Trainee education priority",TURN:"Turnover / time pressure",
   PREF:"Surgeon or patient request",NONE:"No reason given",CRED:"Privileges not in place (structural)",
   TIME:"No time (legacy)",UNSPEC:"Unspecified"};
-/* v3.6.0: a no-case day carries WHAT the day was. Missing dayType (pre-3.6 records) = CLIN.
+/* v3.6.0: a no-case day carries WHAT the day was. (v3.6.22 adds CALLQ and OFF.) Missing dayType (pre-3.6 records) = CLIN.
    CLIN + FLOAT are clinical days (at the bedside, no cases). ADMIN/TRAIN are duty days away
    from the bedside. LEAVE is excluded from every denominator. */
 const DAY_TYPES = {CLIN:"Clinical — no qualifying cases", FLOAT:"Float / relief / giving breaks",
-  ADMIN:"Admin / additional duty", TRAIN:"Training · FTX · TDY · school", LEAVE:"Leave / pass"};
-const CLINICAL_DAY = {CLIN:1, FLOAT:1};
+  ADMIN:"Admin / additional duty", TRAIN:"Training · FTX · TDY · school", LEAVE:"Leave / pass",
+  CALLQ:"Quiet call — on call, no cases", OFF:"Non-duty day"};
+/* v3.6.22: CALLQ = a call shift that produced no cases (a clinical day: you were available);
+   OFF = a day you were not on duty (excluded from every denominator, like LEAVE).
+   SOLO_DAY = the day types that cannot share a date with a case; a quiet call can (day cases,
+   then a quiet night). OFF_DAY = not duty at all. */
+const CLINICAL_DAY = {CLIN:1, FLOAT:1, CALLQ:1};
+const SOLO_DAY = {CLIN:1, FLOAT:1};
+const OFF_DAY = {LEAVE:1, OFF:1};
 const RANKS   = ["2LT","1LT","CPT","MAJ","LTC","COL","CIV"];   /* CIV v3.6.20: GS / contractor */
 const BILLETS = [["STAFF","Staff CRNA"],["CHIEF","Chief CRNA"],["SECTION","Section / department chief"],
   ["FACULTY","Faculty · program director"],["OIC","OIC · commander · staff (non-clinical billet)"],
@@ -1489,6 +1646,9 @@ let ACT = "OR";
 let PROCSEL = new Set();     /* multi-select procedure/exam ids for this entry */
 let TRAINEE = null;          /* v3.6.20: trainee present (TRAINEES id) */
 let PROCTR = new Set();      /* v3.6.20: subset of PROCSEL a trainee performed under supervision */
+let PROCTK = new Set();      /* v3.6.21: trainee started, I took over and finished = my rep */
+let DROVEV = null;           /* v3.6.21: who drove the anesthetic (DROVE id) */
+let CONTRIB = new Set();     /* v3.6.21: contributions on a day record */
 let AUT = {};
 let FLAGS = {};
 let EDIT_ID = null;          /* set when completing a previously stubbed case */
@@ -1538,7 +1698,7 @@ function drawProcs(){
   $("procs").innerHTML = html;
   $("procs").querySelectorAll("[data-proc]").forEach(b=>b.onclick=()=>{
     const id=b.dataset.proc;
-    if(PROCSEL.has(id)){ PROCSEL.delete(id); PROCTR.delete(id); } else PROCSEL.add(id);
+    if(PROCSEL.has(id)){ PROCSEL.delete(id); PROCTR.delete(id); PROCTK.delete(id); } else PROCSEL.add(id);
     /* a PPH is an obstetric case: fill the indication only if it is blank, never overwrite */
     if(id==="OB_PPH" && PROCSEL.has(id) && !IND){ IND="OB"; drawInd(); }
     drawProcs();
@@ -1552,16 +1712,30 @@ function drawTrainee(){
   tr.innerHTML = TRAINEES.map(t=>`<button class="chip sm${TRAINEE===t[0]?" on":""}" data-tr="${t[0]}">${escH(t[1])}</button>`).join("");
   tr.querySelectorAll("[data-tr]").forEach(b=>b.onclick=()=>{
     TRAINEE = (TRAINEE===b.dataset.tr)? null : b.dataset.tr;
-    if(!TRAINEE || TRAINEE==="NONE") PROCTR.clear();
+    if(!TRAINEE || TRAINEE==="NONE"){ PROCTR.clear(); PROCTK.clear(); DROVEV=null; }
     drawTrainee();
   });
-  const show = !!TRAINEE && TRAINEE!=="NONE" && PROCSEL.size>0;
+  const present = !!TRAINEE && TRAINEE!=="NONE";
+  $("drove-wrap").style.display = present ? "" : "none";
+  if(present){
+    $("drove-row").innerHTML = DROVE.map(d=>`<button class="chip sm${DROVEV===d[0]?" on":""}" data-drove="${d[0]}">${escH(d[1])}</button>`).join("");
+    $("drove-row").querySelectorAll("[data-drove]").forEach(b=>b.onclick=()=>{ DROVEV = (DROVEV===b.dataset.drove)? null : b.dataset.drove; drawTrainee(); });
+  }
+  const show = present && PROCSEL.size>0;
   $("proctr-wrap").style.display = show ? "" : "none";
   if(!show) return;
   const lbl = id => { const p=(PROCS[ACT]||[]).find(x=>x[0]===id); return p? p[1] : id; };
-  $("proctr").innerHTML = Array.from(PROCSEL).map(id=>`<button class="chip sm${PROCTR.has(id)?" on":""}" data-ptr="${id}">${escH(lbl(id))}</button>`).join("");
+  /* 3 states per procedure: me (plain) -> trainee did it (on) -> trainee started, I took over (tk) */
+  $("proctr").innerHTML = Array.from(PROCSEL).map(id=>{
+    const st = PROCTK.has(id) ? " on tk" : PROCTR.has(id) ? " on" : "";
+    const pre = PROCTK.has(id) ? "\u21a9 " : PROCTR.has(id) ? "\u2713 " : "";
+    return `<button class="chip sm${st}" data-ptr="${id}" data-state="${PROCTK.has(id)?"TAKEOVER":PROCTR.has(id)?"TRAINEE":"ME"}">${pre}${escH(lbl(id))}</button>`; }).join("");
   $("proctr").querySelectorAll("[data-ptr]").forEach(b=>b.onclick=()=>{
-    const id=b.dataset.ptr; PROCTR.has(id) ? PROCTR.delete(id) : PROCTR.add(id); drawTrainee(); });
+    const id=b.dataset.ptr;
+    if(PROCTK.has(id)){ PROCTK.delete(id); }                       /* takeover -> me */
+    else if(PROCTR.has(id)){ PROCTR.delete(id); PROCTK.add(id); }   /* trainee -> takeover */
+    else { PROCTR.add(id); }                                        /* me -> trainee */
+    drawTrainee(); });
 }
 
 /* ══════════════════ render: autonomy ══════════════════ */
@@ -1621,7 +1795,7 @@ function drawAttend(){
 /* Codebook: every closed-list value has a one-line rule (CODEBOOK.md carries the paragraph).
    The version is stamped on every record so a later change to a definition is visible in the data. */
 let IND = null, MECH = null, STAGE = null, HEM = null, HEMDIR = false;
-const CODEBOOK_V = "2026-10-25";
+const CODEBOOK_V = "2026-11-13";
 const IND_RULE = {
   TRAUMA_PEN:"Wound from a penetrating object or projectile is the reason for surgery (GSW, stab, shrapnel). Add the operation stage.",
   TRAUMA_BLUNT:"Injury from blunt force is the reason for surgery (MVC, fall, crush, assault). Add the mechanism and the operation stage.",
@@ -1641,6 +1815,7 @@ function drawInd(){
     if(!TRAUMA_IND.has(IND)) STAGE = null;
     drawInd();
   });
+  drawBurn();
   const mw=$("mechwrap"); if(mw) mw.style.display = (IND==="TRAUMA_BLUNT") ? "" : "none";
   const mr=$("mechrow"); if(mr){
     mr.innerHTML = MECHANISM.map(o=>`<button class="chip sm${MECH===o[0]?" on":""}" data-mech="${o[0]}">${escH(o[1])}</button>`).join("");
@@ -1703,6 +1878,7 @@ function wireChips(box){
   box.querySelectorAll("[data-cpt]").forEach(b=>b.onclick=()=>{
     $("f-cpt").value=b.dataset.cpt; $("f-base").value=b.dataset.bu;
     if(!$("f-desc").value) $("f-desc").value=b.dataset.d;
+    BURNT = b.dataset.cpt==="01951" ? "T0_3" : b.dataset.cpt==="01952" ? "T4_9" : null; drawBurn();
     $("searchres").innerHTML=""; $("regionres").innerHTML=""; $("f-search").value=""; toast("CPT "+b.dataset.cpt);
   });
 }
@@ -1875,6 +2051,7 @@ function fullSave(){
   if(bv && (+bv<0.5 || +bv>60)){ toast("Base units must be 0.5–60"); $("f-base").focus(); return; }
   { const d=$("f-date").value; if(d && d>today()){ toast("That date is in the future — check it"); $("f-date").focus(); return; } }
   if(PROCSEL.has("OB_PPH") && !HEM && !confirm("PPH is tagged but no blood products are recorded.\n\nSave anyway?")) return;
+  if(ACT==="OR" && !$("f-cpt").value.trim() && !confirm("No CPT code on this OR case.\n\nThe JKSA clinical activity score is built from CPT-coded workload, so this case cannot count toward it. Save without a code?")) { $("f-search").focus(); return; }
   const r = baseRecord("case");
   r.stub = false;
   if(prior){
@@ -1907,6 +2084,12 @@ function fullSave(){
   r.trainee = TRAINEE || null;
   r.procsTrainee = (TRAINEE && TRAINEE!=="NONE") ? Array.from(PROCTR).filter(p=>PROCSEL.has(p)) : [];
   if(!r.procsTrainee.length) r.procsTrainee = null;
+  r.procsTakeover = (TRAINEE && TRAINEE!=="NONE") ? Array.from(PROCTK).filter(p=>PROCSEL.has(p) && !(r.procsTrainee||[]).includes(p)) : [];
+  if(!r.procsTakeover.length) r.procsTakeover = null;
+  r.drove = (TRAINEE && TRAINEE!=="NONE" && DROVEV) ? DROVEV : null;
+  /* tier only stands if the code still matches it — a hand-edited CPT wins */
+  r.burnTbsa = (ACT==="OR" && BURNT && BURN_TIER[BURNT][2]===r.cpt) ? BURNT : null;
+  r.burnAddOn = r.burnTbsa ? BURN_TIER[BURNT][3] : null;
   r.cptSecondary = (function(){ const v=$("f-cpt2").value.split(",").map(x=>x.trim()).filter(Boolean);
     return v.length? v : null; })();
   r.minutes = mv ? parseInt(mv,10) : null;
@@ -1988,7 +2171,7 @@ function clearForm(resetDate){
      cases still keeps the date; only coming out of an edit resets it. */
   if(resetDate && $("f-date")) $("f-date").value = today();
   syncDateNote();
-  PROCSEL.clear(); PROCTR.clear(); TRAINEE=null;
+  PROCSEL.clear(); PROCTR.clear(); PROCTK.clear(); TRAINEE=null; DROVEV=null; BURNT=null;
   ["f-cpt","f-base","f-cpt2","f-mins","f-desc","f-search"].forEach(i=>$(i).value="");
   if($("f-site")) $("f-site").value="";
   PS=null; QC={}; AUT={}; FLAGS={}; IND=null; MECH=null; STAGE=null; HEM=null; HEMDIR=false; ATTEND=null;
@@ -2013,24 +2196,32 @@ function drawEditBar(){
    clear-only version silently turned a simulated stub into live exposure.) */
 function finishStub(id){ editRecord(id); }
 function zeroDay(){ $("zero-form").classList.toggle("hide"); }
+/* Returns an error string, or null when the day record was added (caller persists). */
+function recordDay(d, type, contrib){
+  if(ENTRIES.some(e=>e.kind==="zero" && e.date===d)) return "A day record already exists for "+d;
+  /* a clinical no-case day cannot coexist with a case; an admin/training/leave/quiet-call record can
+     (a half day of clinic and a half day of admin is a real day) */
+  if(SOLO_DAY[type] && ENTRIES.some(e=>e.kind==="case" && e.date===d))
+    return "You have a case logged on "+d+" — that is a clinical day with cases, not a zero-day";
+  const r = baseRecord("zero"); r.stub=false; r.date=d; r.dayType=type;
+  r.dayContrib = contrib && contrib.length ? contrib : null;
+  ENTRIES.push(r); return null;
+}
 function saveDay(type){
   if(!gateSetup()) return;
   const d = $("f-date").value || today();
-  if(ENTRIES.some(e=>e.kind==="zero" && e.date===d)){ toast("A day record already exists for "+d); return; }
-  /* a clinical no-case day cannot coexist with a case; an admin/training/leave record can
-     (a half day of clinic and a half day of admin is a real day) */
-  if(CLINICAL_DAY[type] && ENTRIES.some(e=>e.kind==="case" && e.date===d)){
-    toast("You have a case logged on "+d+" — that is a clinical day with cases, not a zero-day"); return; }
-  const r = baseRecord("zero"); r.stub=false; r.date=d; r.dayType=type;
-  ENTRIES.push(r); persist();
+  const err = recordDay(d, type, Array.from(CONTRIB));
+  if(err){ toast(err); return; }
+  persist();
+  CONTRIB.clear(); drawContrib();
   $("zero-form").classList.add("hide");
   toast((DAY_TYPES[type]||"Day")+" recorded — absence is data");
 }
 /* A case on a date that carried a CLINICAL zero-day: the case wins, the zero-day was wrong.
-   Admin / training / leave records survive — the case happened alongside them. */
+   Admin / training / leave / quiet-call records survive — the case happened alongside them. */
 function retireZeroDay(d){
   const before=ENTRIES.length;
-  forget(e=>!(e.kind==="zero" && e.date===d && CLINICAL_DAY[e.dayType||"CLIN"]));
+  forget(e=>!(e.kind==="zero" && e.date===d && SOLO_DAY[e.dayType||"CLIN"]));
   if(ENTRIES.length<before) toast("Removed the zero-day for "+d+" — a case was logged");
 }
 let MISS = {};
@@ -2135,14 +2326,67 @@ function drawTally(){
       const s = sim.filter(e=>e.taskIndex===i).reduce((s2,e)=>s2+cnt(e),0);
       return `<div class="kv"><span>${t.name}${t.capturable?"":' <span class="pill sim">not capturable here</span>'}</span>
         <b>${n}${oth?` <span style="color:var(--muted);font-size:12px">+${oth} assisted/observed</span>`:""}${s?` <span style="color:var(--warn);font-size:12px">+${s} sim</span>`:""}</b></div>`;
-    }).join("");
+    }).join("") + espTallyHTML();
+}
+/* v3.6.21 — which Expeditionary Scope of Practice capabilities THIS log evidences (exposure, not competence) */
+function espTallyHTML(){
+  const cov = {};
+  ENTRIES.forEach(r=>{ if(r.simulated) return; espOf(r).forEach(c=>{ const o=cov[c]=cov[c]||{n:0,last:""}; o.n++; if((r.date||"")>o.last) o.last=r.date||""; }); });
+  const got = ESP_SOLE.filter(c=>cov[c]).length;
+  return `<div class="banner ok" style="margin:16px 0 10px">Expeditionary Scope of Practice: evidence for <b>${got} / 16</b> sole-provider capabilities
+      <div style="font-weight:400;margin-top:6px;font-size:12.5px">A capability is <b>evidenced</b> when any case descriptor, ICTL task or day contribution maps to it. This is exposure, never a competence claim — the Scope document itself says no valid assessment exists.</div></div>` +
+    ESP_CAPS.map(c=>{ const o=cov[c[0]]; return `<div class="kv" title="${escH(c[2])}"><span>${escH(c[1])}</span><b>${o? o.n+' <span style="color:var(--muted);font-size:12px">last '+o.last+'</span>' : '<span style="color:var(--muted)">—</span>'}</b></div>`; }).join("");
 }
 
 /* ══════════════════ unfinished ══════════════════ */
+/* ── v3.6.22 · days with nothing logged ──────────────────────────────────────────
+   A weekday in the last GAP_LOOKBACK days with no record of ANY kind. Weekends are never asked
+   about; nothing before the first record is asked about (a new logger gets no wall of holes).
+   Today is not asked — the day is not over. Answering writes an ordinary day record. */
+const GAP_LOOKBACK = 14;
+const GAP_ORDER = ["OFF","LEAVE","ADMIN","TRAIN","CALLQ","FLOAT","CLIN"];
+const GAP_SHORT = {OFF:"Non-duty", LEAVE:"Leave", ADMIN:"Admin", TRAIN:"Training · TDY", CALLQ:"Quiet call", FLOAT:"Float", CLIN:"Clinical, no case"};
+function ymdAdd(s, n){ const a=s.split("-").map(Number), d=new Date(a[0],a[1]-1,a[2]+n);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function gapDays(){
+  const live = ENTRIES.filter(e=>e && e.date && !e.simulated);
+  if(!live.length) return [];
+  const first = live.reduce((m,e)=>e.date<m ? e.date : m, live[0].date);
+  const have = new Set(ENTRIES.filter(e=>e && e.date).map(e=>e.date)), out=[], t=today();
+  for(let i=1;i<=GAP_LOOKBACK;i++){
+    const d = ymdAdd(t, -i); if(d<first) break;
+    const a=d.split("-").map(Number), dow=new Date(a[0],a[1]-1,a[2]).getDay();
+    if(dow===0 || dow===6 || have.has(d)) continue;
+    out.push(d);
+  }
+  return out;
+}
+function gapLabel(d){ const a=d.split("-").map(Number);
+  return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(a[0],a[1]-1,a[2]).getDay()]+" "+a[1]+"/"+a[2]; }
+function gapAnswer(days, type){
+  if(!gateSetup()) return;
+  let n=0, err=null;
+  days.forEach(d=>{ const e = recordDay(d, type, null); if(e) err=e; else n++; });
+  if(n) persist();
+  toast(n ? n+" day"+(n===1?"":"s")+" recorded — "+DAY_TYPES[type] : (err||"Nothing to record"));
+  drawTodo();
+}
+function drawGaps(gaps){
+  const card=$("gapcard"); if(!card) return;
+  card.classList.toggle("hide", !gaps.length);
+  $("gaplist").innerHTML = gaps.map(d=>`<div style="margin:0 0 10px"><b>${gapLabel(d)}</b>
+    <div class="chips" style="margin-top:5px">${GAP_ORDER.map(k=>`<button class="chip sm" data-gd="${d}" data-gt="${k}">${GAP_SHORT[k]}</button>`).join("")}</div></div>`).join("");
+  $("gaplist").querySelectorAll("[data-gd]").forEach(b=>b.onclick=()=>gapAnswer([b.dataset.gd], b.dataset.gt));
+  const bulk=(t,label)=>{ if(!gaps.length) return; if(!confirm("Mark all "+gaps.length+" day"+(gaps.length===1?"":"s")+" as "+label+"?")) return; gapAnswer(gaps.slice(), t); };
+  $("gap-all-off").onclick = ()=>bulk("OFF","Non-duty");
+  $("gap-all-leave").onclick = ()=>bulk("LEAVE","Leave");
+}
 function drawTodo(){
   const stubs = ENTRIES.filter(e=>e.stub && !e.unrecoverable);
-  $("todobadge").textContent = stubs.length;
-  $("todobadge").classList.toggle("hide", stubs.length===0);
+  const gaps = gapDays();
+  $("todobadge").textContent = stubs.length + gaps.length;
+  $("todobadge").classList.toggle("hide", stubs.length + gaps.length===0);
+  drawGaps(gaps);
   $("todolist").innerHTML = stubs.length
     ? stubs.slice().reverse().map(e=>`<div class="item">
         <div class="g"><b>${escH(e.activityType)} · ${escH(e.date)}</b><small>logged ${new Date(e.savedAt).toLocaleTimeString()}</small></div>
@@ -2240,6 +2484,10 @@ function drawAlerts(){
   if(stubs) h = `<div class="banner warn">◷ <b>${stubs} unfinished ${stubs===1?"case":"cases"}.</b>
     A stub already counts the case — finishing it adds the acuity and autonomy detail.
     <button id="go-todo" class="chip sm" style="margin-left:8px">Finish now</button></div>` + h;
+  const gapN = gapDays().length;
+  if(gapN) h += `<div class="banner warn">📅 <b>${gapN} weekday${gapN===1?"":"s"} with nothing logged</b> in the last two weeks.
+    Admin, leave, TDY, a quiet call, a day off — one tap each.
+    <button id="go-gaps" class="chip sm" style="margin-left:8px">Review</button></div>`;
   /* MONTHLY SEND NUDGE — v3.6.15. Separate from the export nag above: that one protects the
      logger from losing their own data, this one is the collection cadence. Only once a month
      has turned over and only if there is something to send, so it cannot become wallpaper. */
@@ -2256,6 +2504,7 @@ function drawAlerts(){
   wireChecklist();
   const gt=$("go-todo"); if(gt) gt.onclick=()=>show("todo");
   const gs=$("go-send"); if(gs) gs.onclick=()=>show("data");
+  const gg=$("go-gaps"); if(gg) gg.onclick=()=>show("todo");
   syncBadge();
   const badge = $("hbadge");
   const live = ENTRIES.filter(e=>e.kind==="case" && !e.simulated).length;
@@ -2326,7 +2575,8 @@ function drawHealth(){
     "Cases (simulated)": cases.filter(e=>e.simulated).length,
     "Unfinished stubs": ENTRIES.filter(e=>e.stub).length,
     "Day records (no cases)": ENTRIES.filter(e=>e.kind==="zero").length,
-    "  of which away from bedside": ENTRIES.filter(e=>e.kind==="zero" && !CLINICAL_DAY[e.dayType||"CLIN"]).length,
+    "  of which away from bedside": ENTRIES.filter(e=>e.kind==="zero" && !CLINICAL_DAY[e.dayType||"CLIN"] && !OFF_DAY[e.dayType]).length,
+    "  of which leave / non-duty": ENTRIES.filter(e=>e.kind==="zero" && OFF_DAY[e.dayType]).length,
     "ICTL entries": ENTRIES.filter(e=>e.kind==="ictl").length,
     "Missed opportunities": ENTRIES.filter(e=>e.kind==="missed").length
   };
@@ -2397,7 +2647,7 @@ function exportCSV(){
   const cols = ["id","schemaVersion","kind","stub","date","savedAt","completedAt","editedAt","restoredFromId","activityType","siteId","siteName",
     "loggerId","loggerKey","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description","cptQuery",
     "asaPS","qc","acuity","indication","mechanism","opStage","hemorrhage","directedProducts","attendReason","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
-    "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet","loggerFte","loggerProvType","loggerExp","trainee","procsTrainee","role","success","unrecoverable","codebook"];
+    "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet","loggerFte","loggerProvType","loggerExp","trainee","procsTrainee","procsTakeover","drove","burnTbsa","burnAddOn","dayContrib","role","success","unrecoverable","codebook"];
   const esc = ExportContract.csv;
   const lines = [cols.join(",")].concat(ENTRIES.map(e=>cols.map(c=>{
     const v = e[c];
@@ -2461,6 +2711,7 @@ $("file").onchange = function(){
         ["description","cpt","task","missedTask","missedReason","missedWho","loggerId","loggerKey","siteId","siteName",
          "siteType","loggerRank","loggerBillet","loggerProvType","loggerExp","dayType"].forEach(k=>{ if(k in r) r[k]=str(r[k]); });
         r.stub=!!r.stub; r.simulated=!!r.simulated; r.taught=!!r.taught; r.soloInRoom=!!r.soloInRoom;
+        if(r.kind==="zero"){ r.dayContrib = strs(r.dayContrib).filter(k=>CONTRIB_LABEL[k]); if(!r.dayContrib.length) r.dayContrib=null; }
         r.siteOverride=!!r.siteOverride;
         if(r.kind==="case"){
           if(!ACT_IDS.has(r.activityType)){ r.activityType="OTHER"; r._activityCoerced=true; }
@@ -2476,6 +2727,11 @@ $("file").onchange = function(){
           if(r.trainee!=null && !TRAINEE_LABEL[r.trainee]) r.trainee=null;          /* closed list */
           r.procsTrainee = strs(r.procsTrainee).filter(p=>(r.procs||[]).includes(p));
           if(!r.procsTrainee.length || !r.trainee || r.trainee==="NONE") r.procsTrainee=null;
+          r.procsTakeover = strs(r.procsTakeover).filter(p=>(r.procs||[]).includes(p) && !(r.procsTrainee||[]).includes(p));
+          if(!r.procsTakeover.length || !r.trainee || r.trainee==="NONE") r.procsTakeover=null;
+          if(r.drove!=null && (!DROVE_LABEL[r.drove] || !r.trainee || r.trainee==="NONE")) r.drove=null;
+          if(r.burnTbsa!=null && (!BURN_TIER[r.burnTbsa] || BURN_TIER[r.burnTbsa][2]!==r.cpt)) r.burnTbsa=null;   /* closed list */
+          r.burnAddOn = r.burnTbsa ? BURN_TIER[r.burnTbsa][3] : null;
           r.cptSecondary = strs(r.cptSecondary).length ? strs(r.cptSecondary) : null;
           r.baseUnits = num(r.baseUnits,0.5,60); r.minutes = num(r.minutes,0,1440,true);
           r.asaPS = num(r.asaPS,1,6,true); r.sitePolicyCeiling = num(r.sitePolicyCeiling,0,3,true);
@@ -2698,6 +2954,10 @@ $("btn-save").onclick   = fullSave;
 $("btn-zero").onclick   = zeroDay;
 $("btn-zero-cancel").onclick = ()=>$("zero-form").classList.add("hide");
 document.querySelectorAll("#zero-types [data-daytype]").forEach(b=>b.onclick=()=>saveDay(b.dataset.daytype));
+function drawContrib(){ const z=$("zero-contrib"); if(!z) return;
+  z.innerHTML = CONTRIBS.map(c=>`<button class="chip sm${CONTRIB.has(c[0])?" on":""}" data-contrib="${c[0]}">${escH(c[1])}</button>`).join("");
+  z.querySelectorAll("[data-contrib]").forEach(b=>b.onclick=()=>{ const k=b.dataset.contrib; CONTRIB.has(k)? CONTRIB.delete(k) : CONTRIB.add(k); drawContrib(); }); }
+drawContrib();
 $("btn-missed").onclick = missedOpp;
 $("btn-remind").onclick = exportReminder;
 $("btn-ictl").onclick   = logICTL;
@@ -2812,7 +3072,8 @@ function editRecord(id){
   AUT = Object.assign({}, e.autonomy||{});
   FLAGS = {sim:!!e.simulated, teach:!!e.taught, solo:!!e.soloInRoom};
   PROCSEL = new Set(e.procs||[]);
-  TRAINEE = e.trainee || null; PROCTR = new Set(e.procsTrainee||[]);
+  TRAINEE = e.trainee || null; PROCTR = new Set(e.procsTrainee||[]); PROCTK = new Set(e.procsTakeover||[]); DROVEV = e.drove || null;
+  BURNT = BURN_TIER[e.burnTbsa] ? e.burnTbsa : null;
   drawActs(); drawPSQC(); drawAut(); drawInd(); drawEditBar();
   // repaint autonomy selections
   const phases=PHASE_SETS[ACT]||PHASE_SETS.OTHER;
