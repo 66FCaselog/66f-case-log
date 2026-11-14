@@ -1043,7 +1043,7 @@ const PROC_ICTL = {
 };
 const PROC_HINTS = {
   OR:"Optional descriptors \u2014 tap what applies. This is where the exposure hides: a CPT can\u2019t show a TIVA, an awake fiberoptic, an intraop MTP, or a pediatric patient.",
-  REGIONAL:"Tap every block performed, plus guidance and single-shot vs catheter.",
+  REGIONAL:"Tap every block performed, plus guidance and single-shot vs catheter. Each block saves as its own record.",
   POCUS:"Tap every exam. Practice scans count \u2014 note it in the description.",
   TRAUMA_BAY:"Start with your ROLE (primary / airway / secondary / observer), then what you did. \u2605 = official 66F ICTL task. Log those in the ICTL tab too \u2014 the tallies are kept separate on purpose.",
   ICU:"Activity descriptors, not an official Army task list. Tap what YOU did and what the PATIENT was \u2014 \u201crounded on a ventilated patient in cardiogenic shock\u201d is three taps. \u2605 items are 66F ICTL tasks \u2014 log those in the ICTL tab too."
@@ -1069,7 +1069,7 @@ const ICTL = ICTL_OFFICIAL.map(t=>({code:t[0], name:ICTL_TITLE[t[0]]||t[1], capt
 
 /* ══════════════════ constants ══════════════════ */
 const SCHEMA = 3;
-const APP_VERSION = "v3.6.22";
+const APP_VERSION = "v3.6.23";
 const K_MAIN = "crna_caselog_v3";
 /* Base-unit provenance is a property of the BUILD, not a user choice — the CPT
    table is embedded, so every user carries identical weights. Asking users to
@@ -1795,7 +1795,7 @@ function drawAttend(){
 /* Codebook: every closed-list value has a one-line rule (CODEBOOK.md carries the paragraph).
    The version is stamped on every record so a later change to a definition is visible in the data. */
 let IND = null, MECH = null, STAGE = null, HEM = null, HEMDIR = false;
-const CODEBOOK_V = "2026-11-13";
+const CODEBOOK_V = "2026-11-14";
 const IND_RULE = {
   TRAUMA_PEN:"Wound from a penetrating object or projectile is the reason for surgery (GSW, stab, shrapnel). Add the operation stage.",
   TRAUMA_BLUNT:"Injury from blunt force is the reason for surgery (MVC, fall, crush, assault). Add the mechanism and the operation stage.",
@@ -2112,9 +2112,25 @@ function fullSave(){
   r.taught = !!FLAGS.teach;
   r.soloInRoom = !!FLAGS.solo;
   r.acuity = acuity(r);
+  /* v3.6.23 — two blocks on one patient are two blocks. A regional record that carries more than one
+     BLK_ chip is written as one record PER block (shared guidance / single-shot / catheter chips ride
+     on each), tied together by caseGroup so the patient link survives. The record being saved keeps
+     the first block (and its id, if this is an edit); the rest are new. */
+  const blks = (ACT==="REGIONAL") ? (r.procs||[]).filter(p=>p.indexOf("BLK_")===0) : [];
+  let siblings = [];
+  if(blks.length>1){
+    const shared = r.procs.filter(p=>p.indexOf("BLK_")!==0), gid = (prior && prior.caseGroup) || uid();
+    const only = (list, procs) => { const k=(list||[]).filter(x=>procs.includes(x)); return k.length? k : null; };
+    const orig = { tr:r.procsTrainee, tk:r.procsTakeover };
+    r.caseGroup = gid;
+    siblings = blks.slice(1).map(b=>{ const c = JSON.parse(JSON.stringify(r)); c.id = uid(); c.procs = shared.concat(b);
+      c.procsTrainee = only(orig.tr, c.procs); c.procsTakeover = only(orig.tk, c.procs); return c; });
+    r.procs = shared.concat(blks[0]); r.procsTrainee = only(orig.tr, r.procs); r.procsTakeover = only(orig.tk, r.procs);
+  }
   retireZeroDay(r.date);
   if(prior){ ENTRIES = ENTRIES.map(e=> e.id===prior.id ? r : e); }
   else { ENTRIES.push(r); }
+  siblings.forEach(c=>ENTRIES.push(c));
   const wasEdit = !!prior;
   EDIT_ID = null;
   /* One-tap ICTL logging. Offered ONLY on first capture (new save or stub
@@ -2122,9 +2138,9 @@ function fullSave(){
      never feed the tally twice. Codes dedupe (CVL US + landmark = one task,
      counted once — conservative, no inflation). */
   const offerICTL = !prior || prior.stub;   /* new save, or first completion of a stub */
-  const codes = Array.from(new Set((r.procs||[]).filter(p=>!(r.procsTrainee||[]).includes(p)).map(p=>PROC_ICTL[p]).filter(Boolean)));
+  const codes = Array.from(new Set([r].concat(siblings).flatMap(x=>(x.procs||[]).filter(p=>!(x.procsTrainee||[]).includes(p)).map(p=>PROC_ICTL[p]).filter(Boolean))));
   persist(); clearForm(wasEdit);
-  toast(wasEdit ? "Completed ✓" : "Case saved ✓");
+  toast(siblings.length ? (siblings.length+1)+" blocks saved — one record each ✓" : wasEdit ? "Completed ✓" : "Case saved ✓");
   if(codes.length && offerICTL){
     const names = codes.map(c=>{ const t=ICTL.find(x=>x.code===c); return t?t.name:c; });
     if(confirm("\u2605 That case included "+codes.length+" official ICTL task"+(codes.length>1?"s":"")+":\n\n\u2022 "
@@ -2647,7 +2663,7 @@ function exportCSV(){
   const cols = ["id","schemaVersion","kind","stub","date","savedAt","completedAt","editedAt","restoredFromId","activityType","siteId","siteName",
     "loggerId","loggerKey","sitePolicyCeiling","baseUnitSource","baseUnitYear","cpt","baseUnits","description","cptQuery",
     "asaPS","qc","acuity","indication","mechanism","opStage","hemorrhage","directedProducts","attendReason","procs","cptSecondary","minutes","siteOverride","siteType","simulated","taught","soloInRoom","task","taskIndex","count",
-    "missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet","loggerFte","loggerProvType","loggerExp","trainee","procsTrainee","procsTakeover","drove","burnTbsa","burnAddOn","dayContrib","role","success","unrecoverable","codebook"];
+    "caseGroup","missedTask","missedEligible","missedAsked","missedWho","missedReason","autonomy","dayType","loggerRank","loggerBillet","loggerFte","loggerProvType","loggerExp","trainee","procsTrainee","procsTakeover","drove","burnTbsa","burnAddOn","dayContrib","role","success","unrecoverable","codebook"];
   const esc = ExportContract.csv;
   const lines = [cols.join(",")].concat(ENTRIES.map(e=>cols.map(c=>{
     const v = e[c];
@@ -2709,7 +2725,7 @@ $("file").onchange = function(){
         r.savedAt = ts(r.savedAt) || (r.date+"T00:00:00.000Z");
         r.completedAt = ts(r.completedAt); r.editedAt = ts(r.editedAt);
         ["description","cpt","task","missedTask","missedReason","missedWho","loggerId","loggerKey","siteId","siteName",
-         "siteType","loggerRank","loggerBillet","loggerProvType","loggerExp","dayType"].forEach(k=>{ if(k in r) r[k]=str(r[k]); });
+         "siteType","loggerRank","loggerBillet","loggerProvType","loggerExp","dayType","caseGroup"].forEach(k=>{ if(k in r) r[k]=str(r[k]); });
         r.stub=!!r.stub; r.simulated=!!r.simulated; r.taught=!!r.taught; r.soloInRoom=!!r.soloInRoom;
         if(r.kind==="zero"){ r.dayContrib = strs(r.dayContrib).filter(k=>CONTRIB_LABEL[k]); if(!r.dayContrib.length) r.dayContrib=null; }
         r.siteOverride=!!r.siteOverride;
