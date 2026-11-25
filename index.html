@@ -347,7 +347,7 @@ details.sub[open]>summary{margin-bottom:10px}
       <div id="trainee-block" style="margin-top:10px">
         <label>Trainee in the room?</label>
         <div class="chips" id="trainee-row" style="margin-top:6px"></div>
-        <style>.chip.tk{border-color:var(--warn);color:var(--warn)}</style>
+        <style>.chip.tk{border:2px solid var(--warn);color:var(--warn);background:var(--surface2);font-weight:800}</style>
         <div id="drove-wrap" style="display:none;margin-top:8px">
           <label>Who drove the anesthetic?</label>
           <div class="chips" id="drove-row" style="margin-top:6px"></div>
@@ -1074,7 +1074,7 @@ const ICTL = ICTL_OFFICIAL.map(t=>({code:t[0], name:ICTL_TITLE[t[0]]||t[1], capt
 
 /* ══════════════════ constants ══════════════════ */
 const SCHEMA = 3;
-const APP_VERSION = "v3.6.24";
+const APP_VERSION = "v3.6.25";
 const K_MAIN = "crna_caselog_v3";
 /* Base-unit provenance is a property of the BUILD, not a user choice — the CPT
    table is embedded, so every user carries identical weights. Asking users to
@@ -1732,7 +1732,7 @@ function drawTrainee(){
   const lbl = id => { const p=(PROCS[ACT]||[]).find(x=>x[0]===id); return p? p[1] : id; };
   /* 3 states per procedure: me (plain) -> trainee did it (on) -> trainee started, I took over (tk) */
   $("proctr").innerHTML = Array.from(PROCSEL).map(id=>{
-    const st = PROCTK.has(id) ? " on tk" : PROCTR.has(id) ? " on" : "";
+    const st = PROCTK.has(id) ? " tk" : PROCTR.has(id) ? " on" : "";   /* v3.6.25: tk no longer stacks on gold .on (amber text on gold was invisible) */
     const pre = PROCTK.has(id) ? "\u21a9 " : PROCTR.has(id) ? "\u2713 " : "";
     return `<button class="chip sm${st}" data-ptr="${id}" data-state="${PROCTK.has(id)?"TAKEOVER":PROCTR.has(id)?"TRAINEE":"ME"}">${pre}${escH(lbl(id))}</button>`; }).join("");
   $("proctr").querySelectorAll("[data-ptr]").forEach(b=>b.onclick=()=>{
